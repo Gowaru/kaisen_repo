@@ -181,7 +181,6 @@
                         name: optMatch[2].trim(),
                         url: `${url}#${optMatch[1]}`,
                         season: 1,
-                        episode: epNum++,
                         dubStatus: url.includes('-vf-') ? 'dub' : 'sub'
                     }));
                 }
@@ -191,7 +190,6 @@
                     name: "Film / Unique",
                     url: `${url}#movie`,
                     season: 1,
-                    episode: 1,
                     dubStatus: url.includes('-vf-') ? 'dub' : 'sub'
                 }));
             }

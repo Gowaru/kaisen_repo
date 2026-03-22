@@ -104,7 +104,6 @@
                     // We pack the streams into the URL field!
                     url: JSON.stringify(episodeStreams),
                     season: 1,
-                    episode: i + 1,
                     dubStatus: url.includes('/vf/') ? 'dub' : 'sub'
                 }));
             }

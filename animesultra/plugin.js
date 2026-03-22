@@ -146,7 +146,6 @@
                             episodes.push({
                                 title: epTitle,
                                 url: epUrl.startsWith('http') ? epUrl : baseUrl + epUrl,
-                                episode: 1,
                                 season: 1
                             });
                         }

@@ -159,7 +159,6 @@
                     name: epName,
                     url: JSON.stringify(formattedUrls),
                     season: 1,
-                    episode: parseInt(epNameRaw) || eps.length + 1,
                     dubStatus: url.includes('-vf-') || url.includes('-vf.') ? 'dub' : 'sub'
                 }));
             }
@@ -169,7 +168,6 @@
                     name: "Film / Unique",
                     url: JSON.stringify([]),
                     season: 1,
-                    episode: 1,
                     dubStatus: url.includes('-vf-') || url.includes('-vf.') ? 'dub' : 'sub'
                 }));
             }

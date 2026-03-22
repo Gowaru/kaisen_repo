@@ -99,7 +99,6 @@
                 epLinks.forEach((link, idx) => {
                     episodes.push({
                         season: 1,
-                        episode: idx + 1,
                         name: link.textContent.trim() || `Épisode ${idx + 1}`,
                         url: link.href,
                         playbackPolicy: 'none'

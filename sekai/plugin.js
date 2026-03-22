@@ -97,7 +97,6 @@
                 episodes.push(new Episode({
                     name: `Épisode ${i}`,
                     url: url + (url.includes('?') ? '&' : '?') + `ep=${i}`,
-                    episode: i,
                     season: 1
                 }));
             }

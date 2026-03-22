@@ -60,7 +60,6 @@
                 saison.episodes.forEach((ep, eIdx) => {
                     episodes.push({
                         season: sIdx + 1,
-                        episode: eIdx + 1,
                         name: ep.title || `Épisode ${eIdx + 1}`,
                         url: `${url}/${sIdx}/${eIdx}`, // Internal URL for loadStreams
                         playbackPolicy: 'none'

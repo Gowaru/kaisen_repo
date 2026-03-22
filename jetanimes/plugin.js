@@ -153,14 +153,13 @@
                         name: epMatch[5].trim(),
                         url: epMatch[4],
                         posterUrl: epMatch[1],
-                        episode: parseInt(epMatch[3]) || parseInt(epMatch[2]) || 1,
                         season: seasonNum || 1
                     }));
                 }
             }
 
             if (episodes.length === 0) {
-                episodes.push(new Episode({ name: "Film / Episode", url, episode: 1, season: 1 }));
+                episodes.push(new Episode({ name: "Film / Episode", url, season: 1 }));
             }
 
             cb({
