@@ -153,8 +153,8 @@
                         name: epMatch[5].trim(),
                         url: epMatch[4],
                         posterUrl: epMatch[1],
-                        episode: parseInt(Math.floor(parseFloat(epMatch[3]))),
-                        season: seasonNum
+                        episode: parseInt(epMatch[3]) || parseInt(epMatch[2]) || 1,
+                        season: seasonNum || 1
                     }));
                 }
             }

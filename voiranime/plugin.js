@@ -109,7 +109,7 @@
                 if (epNumMatch) {
                     episodes.push({
                         season: 1,
-                        episode: parseInt(epNumMatch[1]),
+                        episode: parseInt(epNumMatch[1]) || 1,
                         name: `Épisode ${epNumMatch[1]}`,
                         url: url,
                         playbackPolicy: 'none'
