@@ -1,197 +1,126 @@
 (function() {
-    /**
-     * @typedef {Object} Response
-     * @property {boolean} success
-     * @property {any} [data]
-     * @property {string} [errorCode]
-     * @property {string} [message]
-     */
+    const apiBase = "https://api.franime.fr/api/animes/";
+    const headers = { 'User-Agent': 'Mozilla/5.0' };
 
-    /**
-     * @type {import('@skystream/sdk').Manifest}
-     */
-    // var manifest is injected at runtime
-
-    // 1. (Optional) Register your plugin settings
-    //     registerSettings([
-    //         { id: "quality", name: "Default Quality", type: "select", options: ["1080p", "720p"], default: "1080p" },
-    //         { id: "prefer_dub", name: "Prefer Dubbed", type: "toggle", default: false }
-    //     ]);
-
-    /**
-     * Loads the home screen categories.
-     * @param {(res: Response) => void} cb 
-     */
     async function getHome(cb) {
-        // Example: Using solveCaptcha if needed (await solveCaptcha(siteKey, url))
         try {
-            // Dashboard Layout:
-            // - "Trending" is a reserved category promoted to the Hero Carousel.
-            // - Other categories appear as horizontal thumbnail rows.
-            // - If "Trending" is missing, the first category is used for the carousel.
-            cb({ 
-                success: true, 
-                data: { 
-                    "Trending": [
-                        new MultimediaItem({ 
-                            title: "Example Movie (Carousel)", 
-                            url: `${manifest.baseUrl}/movie`, 
-                            posterUrl: `https://placehold.co/400x600.png?text=Trending+Movie`, 
-                            type: "movie", // Valid types: movie, series, anime, livestream, other
-                            bannerUrl: `https://placehold.co/1280x720.png?text=Trending+Banner`, // (optional)
-                            description: "Plot summary here...", // (optional)
-                            headers: { "Referer": `${manifest.baseUrl}` } // (optional)
-                        })
-                    ],
-                    "Latest Series": [
-                        new MultimediaItem({ 
-                            title: "Example Series (Thumb)", 
-                            url: `${manifest.baseUrl}/series`, 
-                            posterUrl: `https://placehold.co/400x600.png?text=Series+Poster`, 
-                            type: "series",
-                            description: "This category appears as a thumbnail row."
-                        })
-                    ]
-                } 
-            });
+            const res = await axios.get(apiBase, { headers });
+            const data = res.data;
+            const items = data.slice(0, 30).map(anime => ({
+                title: anime.title,
+                url: `https://franime.fr/anime/${anime.id}`,
+                posterUrl: anime.affiche_small || anime.affiche,
+                type: 'anime',
+                status: anime.status === 'EN COURS' ? 'ongoing' : 'completed',
+                playbackPolicy: 'none'
+            }));
+            cb({ success: true, data: items });
         } catch (e) {
-            cb({ success: false, errorCode: "PARSE_ERROR", message: e.stack });
+            console.error(e);
+            cb({ success: false, errorCode: "HOME_ERROR", message: e.stack });
         }
     }
 
-    /**
-     * Searches for media items.
-     * @param {string} query
-     * @param {(res: Response) => void} cb 
-     */
     async function search(query, cb) {
         try {
-            // Standard: Return a List of items
-            // Samples show both a movie and a series
-            cb({ 
-                success: true, 
-                data: [
-                        new MultimediaItem({ 
-                            title: "Example Movie (Search Result)", 
-                            url: `${manifest.baseUrl}/movie`, 
-                            posterUrl: `https://placehold.co/400x600.png?text=Search+Movie`, 
-                            type: "movie", 
-                            bannerUrl: `https://placehold.co/1280x720.png?text=Search+Banner`,
-                            description: "Plot summary here...", 
-                            headers: { "Referer": `${manifest.baseUrl}` } 
-                        }),
-                        new MultimediaItem({ 
-                            title: "Example Series (Search Result)", 
-                            url: `${manifest.baseUrl}/series`, 
-                            posterUrl: `https://placehold.co/400x600.png?text=Search+Series`, 
-                            type: "series", 
-                            description: "A series found in search.", 
-                            headers: { "Referer": `${manifest.baseUrl}` } 
-                        })
-                ] 
-            });
+            const res = await axios.get(apiBase, { headers });
+            const data = res.data;
+            const items = data.filter(anime => 
+                anime.title.toLowerCase().includes(query.toLowerCase()) || 
+                (anime.originalTitle && anime.originalTitle.toLowerCase().includes(query.toLowerCase()))
+            ).map(anime => ({
+                title: anime.title,
+                url: `https://franime.fr/anime/${anime.id}`,
+                posterUrl: anime.affiche_small || anime.affiche,
+                type: 'anime',
+                status: anime.status === 'EN COURS' ? 'ongoing' : 'completed',
+                playbackPolicy: 'none'
+            }));
+            cb({ success: true, data: items });
         } catch (e) {
+            console.error(e);
             cb({ success: false, errorCode: "SEARCH_ERROR", message: e.stack });
         }
     }
 
-    /**
-     * Loads details for a specific media item.
-     * @param {string} url
-     * @param {(res: Response) => void} cb 
-     */
     async function load(url, cb) {
         try {
-            // Standard: Return a single item with full metadata
-            // Sample shows a series with episodes
-            cb({ 
-                success: true, 
-                data: new MultimediaItem({
-                    title: "Example Series Full Details",
-                    url: url,
-                    posterUrl: `https://placehold.co/400x600.png?text=Series+Details`,
-                    type: "series", 
-                    bannerUrl: `https://placehold.co/1280x720.png?text=Series+Banner`,
-                    description: "This is a detailed description of the media.", 
-                    year: 2024,
-                    score: 8.5,
-                    duration: 120, // (optional, in minutes)
-                    status: "ongoing", // ongoing, completed, upcoming
-                    contentRating: "PG-13",
-                    logoUrl: `https://placehold.co/200x100.png?text=Logo`,
-                    isAdult: false,
-                    tags: ["Action", "Adventure"],
-                    cast: [
-                        new Actor({ name: "John Doe", role: "Protagonist", image: "https://placehold.co/200x300.png" })
-                    ],
-                    trailers: [
-                        new Trailer({ name: "Official Trailer", url: "https://www.youtube.com/watch?v=..." })
-                    ],
-                    nextAiring: new NextAiring({ episode: 5, season: 1, airDate: "2024-04-01" }),
-                    recommendations: [
-                        new MultimediaItem({ title: "Similar Show", url: `${manifest.baseUrl}/similar`, posterUrl: "https://placehold.co/400x600", type: "series" })
-                    ],
-                    playbackPolicy: "none", // 'none' | 'VPN Recommended' | 'torrent' | 'externalPlayerOnly' | 'internalPlayerOnly'
-                    syncData: { "my_service_id": "12345" }, // Optional: external metadata sync
-                    streams: [
-                        // Optional: "Instant Load" - bypass loadStreams by providing links here
-                        new StreamResult({ url: "https://example.com/movie.mp4", source: "Instant High" })
-                    ],
-                    headers: { "Referer": `${manifest.baseUrl}` }, 
-                    episodes: [
-                        new Episode({ 
-                            name: "Episode 1", 
-                            url: `${manifest.baseUrl}/watch/1`, 
-                            season: 1, 
-                            episode: 1, 
-                            description: "Episode summary...", 
-                            posterUrl: `https://placehold.co/400x600.png?text=Episode+Poster`,
-                            headers: { "Referer": `${manifest.baseUrl}` },
-                            dubStatus: "sub",
-                            streams: [] // Optional: "Instant Load" for episodes
-                        }),
-                        new Episode({ 
-                            name: "Episode 2", 
-                            url: `${manifest.baseUrl}/watch/2`, 
-                            season: 1, 
-                            episode: 2, 
-                            description: "Next episode summary...", 
-                            posterUrl: `https://placehold.co/400x600.png?text=Episode+Poster`,
-                            headers: { "Referer": `${manifest.baseUrl}` },
-                            dubStatus: "sub"
-                        })
-                    ]
-                })
+            const idMatch = url.match(/anime\/(\d+)/);
+            if (!idMatch) return cb({ success: false, message: "Invalid URL" });
+            const id = parseInt(idMatch[1]);
+
+            const res = await axios.get(apiBase, { headers });
+            const data = res.data;
+            const anime = data.find(a => a.id === id);
+
+            if (!anime) return cb({ success: false, message: "Anime not found" });
+
+            const episodes = [];
+            anime.saisons.forEach((saison, sIdx) => {
+                saison.episodes.forEach((ep, eIdx) => {
+                    episodes.push({
+                        season: sIdx + 1,
+                        episode: eIdx + 1,
+                        name: ep.title || `Épisode ${eIdx + 1}`,
+                        url: `${url}/${sIdx}/${eIdx}`, // Internal URL for loadStreams
+                        playbackPolicy: 'none'
+                    });
+                });
+            });
+
+            cb({
+                success: true,
+                data: {
+                    title: anime.title,
+                    description: anime.description,
+                    posterUrl: anime.affiche || anime.affiche_small,
+                    episodes
+                }
             });
         } catch (e) {
+            console.error(e);
             cb({ success: false, errorCode: "LOAD_ERROR", message: e.stack });
         }
     }
 
-    /**
-     * Resolves streams for a specific media item or episode.
-     * @param {string} url
-     * @param {(res: Response) => void} cb 
-     */
     async function loadStreams(url, cb) {
         try {
-            // Standard: Return a List of stream objects
-            cb({ 
-                success: true, 
-                data: [
-                    new StreamResult({ 
-                        url: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", 
-                        source: "Direct Quality", 
-                        headers: { "Referer": `${manifest.baseUrl}` }
-                    })
-                ] 
-            });
+            // url format: https://franime.fr/anime/{id}/{sIdx}/{eIdx}
+            const match = url.match(/anime\/(\d+)\/(\d+)\/(\d+)/);
+            if (!match) return cb({ success: false, message: "Invalid Stream URL" });
+            const [_, id, sIdx, eIdx] = match;
+
+            const res = await axios.get(apiBase, { headers });
+            const data = res.data;
+            const anime = data.find(a => a.id === parseInt(id));
+            if (!anime) return cb({ success: false, message: "Anime not found" });
+
+            const episode = anime.saisons[parseInt(sIdx)].episodes[parseInt(eIdx)];
+            const streams = [];
+
+            // FRAnime provides several players for each language
+            // Typical flow: resolve via api.franime.fr/api/anime/{id}/{s}/{e}/{lang}/{player_idx}
+            // But let's check if we can just return the player name for now or if we need the actual embed
+            
+            for (const lang in episode.lang) {
+                episode.lang[lang].lecteurs.forEach((player, pIdx) => {
+                    // This is a placeholder for the actual player resolution logic
+                    // In a real SkyStream plugin, we might need to fetch the embed URL
+                    streams.push(new StreamResult({
+                        url: `https://api.franime.fr/api/anime/${id}/${sIdx}/${eIdx}/${lang}/${pIdx}`,
+                        quality: lang.toUpperCase(),
+                        source: `FRAnime - ${player}`
+                    }));
+                });
+            }
+
+            cb({ success: true, data: streams });
         } catch (e) {
-            cb({ success: false, errorCode: "STREAM_ERROR", message: String(e) });
+            console.error(e);
+            cb({ success: false, errorCode: "STREAM_ERROR", message: e.stack });
         }
     }
 
-    // Export to global scope for namespaced IIFE capture
     globalThis.getHome = getHome;
     globalThis.search = search;
     globalThis.load = load;

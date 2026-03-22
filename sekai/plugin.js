@@ -1,166 +1,115 @@
 (function() {
-    /**
-     * @typedef {Object} Response
-     * @property {boolean} success
-     * @property {any} [data]
-     * @property {string} [errorCode]
-     * @property {string} [message]
-     */
+    const baseUrl = 'https://sekai.one';
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
+    };
 
-    /**
-     * @type {import('@skystream/sdk').Manifest}
-     */
-    // var manifest is injected at runtime
-
-    // 1. (Optional) Register your plugin settings
-    //     registerSettings([
-    //         { id: "quality", name: "Default Quality", type: "select", options: ["1080p", "720p"], default: "1080p" },
-    //         { id: "prefer_dub", name: "Prefer Dubbed", type: "toggle", default: false }
-    //     ]);
-
-    /**
-     * Loads the home screen categories.
-     * @param {(res: Response) => void} cb 
-     */
     async function getHome(cb) {
-        // Example: Using solveCaptcha if needed (await solveCaptcha(siteKey, url))
         try {
-            // Dashboard Layout:
-            // - "Trending" is a reserved category promoted to the Hero Carousel.
-            // - Other categories appear as horizontal thumbnail rows.
-            // - If "Trending" is missing, the first category is used for the carousel.
-            cb({ 
-                success: true, 
-                data: { 
-                    "Trending": [
-                        new MultimediaItem({ 
-                            title: "Example Movie (Carousel)", 
-                            url: `${manifest.baseUrl}/movie`, 
-                            posterUrl: `https://placehold.co/400x600.png?text=Trending+Movie`, 
-                            type: "movie", // Valid types: movie, series, anime, livestream, other
-                            bannerUrl: `https://placehold.co/1280x720.png?text=Trending+Banner`, // (optional)
-                            description: "Plot summary here...", // (optional)
-                            headers: { "Referer": `${manifest.baseUrl}` } // (optional)
-                        })
-                    ],
-                    "Latest Series": [
-                        new MultimediaItem({ 
-                            title: "Example Series (Thumb)", 
-                            url: `${manifest.baseUrl}/series`, 
-                            posterUrl: `https://placehold.co/400x600.png?text=Series+Poster`, 
-                            type: "series",
-                            description: "This category appears as a thumbnail row."
-                        })
-                    ]
-                } 
+            const res = await axios.get(baseUrl + '/?v=15', { headers });
+            const html = res.data;
+            const dom = new JSDOM(html);
+            const doc = dom.window.document;
+            const items = [];
+
+            const links = Array.from(doc.querySelectorAll('a[href]'));
+            links.forEach(link => {
+                const href = link.getAttribute('href');
+                const title = link.getAttribute('title') || link.textContent.trim();
+                const img = link.querySelector('img');
+                const posterUrl = img?.getAttribute('src') || img?.getAttribute('data-src');
+
+                if (href && !href.startsWith('http') && !href.startsWith('/') && href !== 'android' && href !== 'contact') {
+                    items.push(new MultimediaItem({
+                        title: title || href.split('?')[0].replace(/-/g, ' '),
+                        url: baseUrl + '/' + href,
+                        posterUrl: posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : '',
+                        type: 'anime'
+                    }));
+                }
+            });
+
+            cb({
+                success: true,
+                data: {
+                    "Catalogue Sekai": items
+                }
             });
         } catch (e) {
             cb({ success: false, errorCode: "PARSE_ERROR", message: e.stack });
         }
     }
 
-    /**
-     * Searches for media items.
-     * @param {string} query
-     * @param {(res: Response) => void} cb 
-     */
     async function search(query, cb) {
         try {
-            // Standard: Return a List of items
-            // Samples show both a movie and a series
-            cb({ 
-                success: true, 
-                data: [
-                        new MultimediaItem({ 
-                            title: "Example Movie (Search Result)", 
-                            url: `${manifest.baseUrl}/movie`, 
-                            posterUrl: `https://placehold.co/400x600.png?text=Search+Movie`, 
-                            type: "movie", 
-                            bannerUrl: `https://placehold.co/1280x720.png?text=Search+Banner`,
-                            description: "Plot summary here...", 
-                            headers: { "Referer": `${manifest.baseUrl}` } 
-                        }),
-                        new MultimediaItem({ 
-                            title: "Example Series (Search Result)", 
-                            url: `${manifest.baseUrl}/series`, 
-                            posterUrl: `https://placehold.co/400x600.png?text=Search+Series`, 
-                            type: "series", 
-                            description: "A series found in search.", 
-                            headers: { "Referer": `${manifest.baseUrl}` } 
-                        })
-                ] 
+            // Re-use home scraping and filter
+            const res = await axios.get(baseUrl + '/?v=15', { headers });
+            const html = res.data;
+            const dom = new JSDOM(html);
+            const doc = dom.window.document;
+            const items = [];
+
+            const links = Array.from(doc.querySelectorAll('a[href]'));
+            links.forEach(link => {
+                const href = link.getAttribute('href');
+                const title = link.getAttribute('title') || link.textContent.trim();
+                const cleanTitle = title || href.split('?')[0].replace(/-/g, ' ');
+
+                if (href && !href.startsWith('http') && !href.startsWith('/') && href !== 'android' && href !== 'contact') {
+                    if (cleanTitle.toLowerCase().includes(query.toLowerCase())) {
+                        const img = link.querySelector('img');
+                        const posterUrl = img?.getAttribute('src') || img?.getAttribute('data-src');
+                        items.push(new MultimediaItem({
+                            title: cleanTitle,
+                            url: baseUrl + '/' + href,
+                            posterUrl: posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : '',
+                            type: 'anime'
+                        }));
+                    }
+                }
             });
+
+            cb({ success: true, data: items });
         } catch (e) {
             cb({ success: false, errorCode: "SEARCH_ERROR", message: e.stack });
         }
     }
 
-    /**
-     * Loads details for a specific media item.
-     * @param {string} url
-     * @param {(res: Response) => void} cb 
-     */
     async function load(url, cb) {
         try {
-            // Standard: Return a single item with full metadata
-            // Sample shows a series with episodes
-            cb({ 
-                success: true, 
+            const res = await axios.get(url, { headers });
+            const html = res.data;
+            const dom = new JSDOM(html);
+            const doc = dom.window.document;
+
+            const title = doc.querySelector('title')?.textContent.replace('Sekai', '').trim();
+            const description = doc.querySelector('meta[property="og:description"]')?.getAttribute('content');
+            const posterUrl = doc.querySelector('meta[property="og:image"]')?.getAttribute('content');
+
+            // Extract episode count from last episode selection
+            const lastSoloMatch = html.match(/var last[a-zA-Z0-9]+\s*=\s*(\d+)/i);
+            const epCount = lastSoloMatch ? parseInt(lastSoloMatch[1]) : 1;
+
+            const episodes = [];
+            for (let i = 1; i <= epCount; i++) {
+                episodes.push(new Episode({
+                    name: `Épisode ${i}`,
+                    url: url + (url.includes('?') ? '&' : '?') + `ep=${i}`,
+                    episode: i,
+                    season: 1
+                }));
+            }
+
+            cb({
+                success: true,
                 data: new MultimediaItem({
-                    title: "Example Series Full Details",
-                    url: url,
-                    posterUrl: `https://placehold.co/400x600.png?text=Series+Details`,
-                    type: "series", 
-                    bannerUrl: `https://placehold.co/1280x720.png?text=Series+Banner`,
-                    description: "This is a detailed description of the media.", 
-                    year: 2024,
-                    score: 8.5,
-                    duration: 120, // (optional, in minutes)
-                    status: "ongoing", // ongoing, completed, upcoming
-                    contentRating: "PG-13",
-                    logoUrl: `https://placehold.co/200x100.png?text=Logo`,
-                    isAdult: false,
-                    tags: ["Action", "Adventure"],
-                    cast: [
-                        new Actor({ name: "John Doe", role: "Protagonist", image: "https://placehold.co/200x300.png" })
-                    ],
-                    trailers: [
-                        new Trailer({ name: "Official Trailer", url: "https://www.youtube.com/watch?v=..." })
-                    ],
-                    nextAiring: new NextAiring({ episode: 5, season: 1, airDate: "2024-04-01" }),
-                    recommendations: [
-                        new MultimediaItem({ title: "Similar Show", url: `${manifest.baseUrl}/similar`, posterUrl: "https://placehold.co/400x600", type: "series" })
-                    ],
-                    playbackPolicy: "none", // 'none' | 'VPN Recommended' | 'torrent' | 'externalPlayerOnly' | 'internalPlayerOnly'
-                    syncData: { "my_service_id": "12345" }, // Optional: external metadata sync
-                    streams: [
-                        // Optional: "Instant Load" - bypass loadStreams by providing links here
-                        new StreamResult({ url: "https://example.com/movie.mp4", source: "Instant High" })
-                    ],
-                    headers: { "Referer": `${manifest.baseUrl}` }, 
-                    episodes: [
-                        new Episode({ 
-                            name: "Episode 1", 
-                            url: `${manifest.baseUrl}/watch/1`, 
-                            season: 1, 
-                            episode: 1, 
-                            description: "Episode summary...", 
-                            posterUrl: `https://placehold.co/400x600.png?text=Episode+Poster`,
-                            headers: { "Referer": `${manifest.baseUrl}` },
-                            dubStatus: "sub",
-                            streams: [] // Optional: "Instant Load" for episodes
-                        }),
-                        new Episode({ 
-                            name: "Episode 2", 
-                            url: `${manifest.baseUrl}/watch/2`, 
-                            season: 1, 
-                            episode: 2, 
-                            description: "Next episode summary...", 
-                            posterUrl: `https://placehold.co/400x600.png?text=Episode+Poster`,
-                            headers: { "Referer": `${manifest.baseUrl}` },
-                            dubStatus: "sub"
-                        })
-                    ]
+                    title,
+                    description,
+                    posterUrl,
+                    type: 'anime',
+                    episodes
                 })
             });
         } catch (e) {
@@ -168,32 +117,69 @@
         }
     }
 
-    /**
-     * Resolves streams for a specific media item or episode.
-     * @param {string} url
-     * @param {(res: Response) => void} cb 
-     */
     async function loadStreams(url, cb) {
         try {
-            // Standard: Return a List of stream objects
-            cb({ 
-                success: true, 
-                data: [
-                    new StreamResult({ 
-                        url: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", 
-                        source: "Direct Quality", 
-                        headers: { "Referer": `${manifest.baseUrl}` }
-                    })
-                ] 
-            });
+            const res = await axios.get(url, { headers });
+            const html = res.data;
+            const streams = [];
+
+            // Extract mu variables (base URLs)
+            const muMap = {};
+            const muRegex = /var (mu\d+)\s*=\s*atob\("([^"]+)"\)/g;
+            let muMatch;
+            while ((muMatch = muRegex.exec(html)) !== null) {
+                // simple base64 decode for the known mugiwara URLs
+                let b64 = muMatch[2];
+                let decoded = "";
+                if (b64 === "aHR0cHM6Ly8yMi5tdWdpd2FyYS5vbmUv") decoded = "https://22.mugiwara.one/";
+                else if (b64 === "aHR0cHM6Ly8yNi5tdWdpd2FyYS5vbmUv") decoded = "https://26.mugiwara.one/";
+                else if (b64 === "aHR0cHM6Ly8yNy5tdWdpd2FyYS5vbmUv") decoded = "https://27.mugiwara.one/";
+                
+                if (decoded) muMap[muMatch[1]] = decoded;
+            }
+
+            // Extract slug from URL or HTML
+            const slug = url.split('/').pop().split('?')[0];
+            const epMatch = url.match(/[?&]ep=(\d+)/);
+            const epNum = epMatch ? epMatch[1] : "1";
+
+            // Reconstruct stream URLs based on patterns found
+            // e.g., episode[num] = mu22 + "solo/solo-" + num + ".mp4";
+            const pathRegex = /episode\[[^\]]+\]\s*=\s*(mu\d+)\s*\+\s*["']([^"']+)["']\s*\+\s*[^;]+/g;
+            let pathMatch;
+            while ((pathMatch = pathRegex.exec(html)) !== null) {
+                const muKey = pathMatch[1];
+                const basePath = pathMatch[2]; // e.g., "solo/solo-"
+                if (muMap[muKey]) {
+                    streams.push(new StreamResult({
+                        url: muMap[muKey] + basePath + epNum + ".mp4",
+                        source: "Sekai " + muKey.replace('mu', 'Server '),
+                        quality: "1080p"
+                    }));
+                }
+            }
+
+            // Fallback: if no patterns found, try some common ones
+            if (streams.length === 0) {
+                const servers = Object.keys(muMap);
+                servers.forEach(s => {
+                   streams.push(new StreamResult({
+                       url: muMap[s] + slug + "/" + slug + "-" + epNum + ".mp4",
+                       source: "Sekai " + s.replace('mu', 'Server '),
+                       quality: "1080p"
+                   }));
+                });
+            }
+
+            cb({ success: true, data: streams });
         } catch (e) {
             cb({ success: false, errorCode: "STREAM_ERROR", message: String(e) });
         }
     }
 
-    // Export to global scope for namespaced IIFE capture
     globalThis.getHome = getHome;
     globalThis.search = search;
     globalThis.load = load;
     globalThis.loadStreams = loadStreams;
 })();
+

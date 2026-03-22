@@ -1,197 +1,208 @@
 (function() {
-    /**
-     * @typedef {Object} Response
-     * @property {boolean} success
-     * @property {any} [data]
-     * @property {string} [errorCode]
-     * @property {string} [message]
-     */
+    const baseUrl = 'https://ww.animesultra.org';
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
+    };
 
-    /**
-     * @type {import('@skystream/sdk').Manifest}
-     */
-    // var manifest is injected at runtime
+    // Helper to use JSDOM like cheerio-ish (querySelectorAll)
+    function queryAll(doc, selector) {
+        return Array.from(doc.querySelectorAll(selector));
+    }
 
-    // 1. (Optional) Register your plugin settings
-    //     registerSettings([
-    //         { id: "quality", name: "Default Quality", type: "select", options: ["1080p", "720p"], default: "1080p" },
-    //         { id: "prefer_dub", name: "Prefer Dubbed", type: "toggle", default: false }
-    //     ]);
-
-    /**
-     * Loads the home screen categories.
-     * @param {(res: Response) => void} cb 
-     */
     async function getHome(cb) {
-        // Example: Using solveCaptcha if needed (await solveCaptcha(siteKey, url))
         try {
-            // Dashboard Layout:
-            // - "Trending" is a reserved category promoted to the Hero Carousel.
-            // - Other categories appear as horizontal thumbnail rows.
-            // - If "Trending" is missing, the first category is used for the carousel.
-            cb({ 
-                success: true, 
-                data: { 
-                    "Trending": [
-                        new MultimediaItem({ 
-                            title: "Example Movie (Carousel)", 
-                            url: `${manifest.baseUrl}/movie`, 
-                            posterUrl: `https://placehold.co/400x600.png?text=Trending+Movie`, 
-                            type: "movie", // Valid types: movie, series, anime, livestream, other
-                            bannerUrl: `https://placehold.co/1280x720.png?text=Trending+Banner`, // (optional)
-                            description: "Plot summary here...", // (optional)
-                            headers: { "Referer": `${manifest.baseUrl}` } // (optional)
-                        })
-                    ],
-                    "Latest Series": [
-                        new MultimediaItem({ 
-                            title: "Example Series (Thumb)", 
-                            url: `${manifest.baseUrl}/series`, 
-                            posterUrl: `https://placehold.co/400x600.png?text=Series+Poster`, 
-                            type: "series",
-                            description: "This category appears as a thumbnail row."
-                        })
-                    ]
-                } 
+            const res = await axios.get(baseUrl, { headers });
+            const html = res.data;
+            const dom = new JSDOM(html);
+            const doc = dom.window.document;
+            const results = [];
+
+            // 1. Trending (Carousel)
+            const trendingItems = [];
+            queryAll(doc, '.block_area_home .swiper-wrapper .swiper-slide').forEach((el) => {
+                const titleEl = el.querySelector('.film-title');
+                const linkEl = el.querySelector('a');
+                const imgEl = el.querySelector('img');
+                const title = titleEl?.textContent.trim();
+                const url = linkEl?.getAttribute('href');
+                const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
+                if (title && url) {
+                    trendingItems.push({
+                        title,
+                        url: url.startsWith('http') ? url : baseUrl + url,
+                        posterUrl: posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl),
+                        type: 'anime'
+                    });
+                }
             });
+            if (trendingItems.length > 0) {
+                results.push({
+                    title: 'Tendance',
+                    items: trendingItems,
+                    type: 'carousel'
+                });
+            }
+
+            // 2. Dernier épisode Ajouté (Grid)
+            const latestItems = [];
+            queryAll(doc, '.block_area_home .film_list-wrap .flw-item').forEach((el) => {
+                const linkEl = el.querySelector('.film-name a');
+                const imgEl = el.querySelector('img');
+                const epEl = el.querySelector('.tick-eps');
+                const title = linkEl?.textContent.trim();
+                const url = linkEl?.getAttribute('href');
+                const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
+                const ep = epEl?.textContent.trim();
+                if (title && url) {
+                    latestItems.push({
+                        title: title + (ep ? ' - ' + ep : ''),
+                        url: url.startsWith('http') ? url : baseUrl + url,
+                        posterUrl: posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl),
+                        type: 'anime'
+                    });
+                }
+            });
+            if (latestItems.length > 0) {
+                results.push({
+                    title: 'Dernier épisode Ajouté',
+                    items: latestItems,
+                    type: 'grid'
+                });
+            }
+
+            cb(results);
         } catch (e) {
-            cb({ success: false, errorCode: "PARSE_ERROR", message: e.stack });
+            console.error(e);
+            cb([]);
         }
     }
 
-    /**
-     * Searches for media items.
-     * @param {string} query
-     * @param {(res: Response) => void} cb 
-     */
     async function search(query, cb) {
         try {
-            // Standard: Return a List of items
-            // Samples show both a movie and a series
-            cb({ 
-                success: true, 
-                data: [
-                        new MultimediaItem({ 
-                            title: "Example Movie (Search Result)", 
-                            url: `${manifest.baseUrl}/movie`, 
-                            posterUrl: `https://placehold.co/400x600.png?text=Search+Movie`, 
-                            type: "movie", 
-                            bannerUrl: `https://placehold.co/1280x720.png?text=Search+Banner`,
-                            description: "Plot summary here...", 
-                            headers: { "Referer": `${manifest.baseUrl}` } 
-                        }),
-                        new MultimediaItem({ 
-                            title: "Example Series (Search Result)", 
-                            url: `${manifest.baseUrl}/series`, 
-                            posterUrl: `https://placehold.co/400x600.png?text=Search+Series`, 
-                            type: "series", 
-                            description: "A series found in search.", 
-                            headers: { "Referer": `${manifest.baseUrl}` } 
-                        })
-                ] 
+            const body = `do=search&subaction=search&story=${encodeURIComponent(query)}`;
+
+            const res = await axios.post(baseUrl + '/index.php?do=search', body, {
+                headers: {
+                    ...headers,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
             });
+            const html = res.data;
+            const dom = new JSDOM(html);
+            const doc = dom.window.document;
+            const results = [];
+
+            queryAll(doc, '.film_list-wrap .flw-item').forEach((el) => {
+                const linkEl = el.querySelector('.film-name a');
+                const imgEl = el.querySelector('img');
+                const title = linkEl?.textContent.trim();
+                const url = linkEl?.getAttribute('href');
+                const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
+                if (title && url) {
+                    results.push({
+                        title,
+                        url: url.startsWith('http') ? url : baseUrl + url,
+                        posterUrl: posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl),
+                        type: 'anime'
+                    });
+                }
+            });
+
+            cb(results);
         } catch (e) {
-            cb({ success: false, errorCode: "SEARCH_ERROR", message: e.stack });
+            console.error(e);
+            cb([]);
         }
     }
 
-    /**
-     * Loads details for a specific media item.
-     * @param {string} url
-     * @param {(res: Response) => void} cb 
-     */
     async function load(url, cb) {
         try {
-            // Standard: Return a single item with full metadata
-            // Sample shows a series with episodes
-            cb({ 
-                success: true, 
-                data: new MultimediaItem({
-                    title: "Example Series Full Details",
-                    url: url,
-                    posterUrl: `https://placehold.co/400x600.png?text=Series+Details`,
-                    type: "series", 
-                    bannerUrl: `https://placehold.co/1280x720.png?text=Series+Banner`,
-                    description: "This is a detailed description of the media.", 
-                    year: 2024,
-                    score: 8.5,
-                    duration: 120, // (optional, in minutes)
-                    status: "ongoing", // ongoing, completed, upcoming
-                    contentRating: "PG-13",
-                    logoUrl: `https://placehold.co/200x100.png?text=Logo`,
-                    isAdult: false,
-                    tags: ["Action", "Adventure"],
-                    cast: [
-                        new Actor({ name: "John Doe", role: "Protagonist", image: "https://placehold.co/200x300.png" })
-                    ],
-                    trailers: [
-                        new Trailer({ name: "Official Trailer", url: "https://www.youtube.com/watch?v=..." })
-                    ],
-                    nextAiring: new NextAiring({ episode: 5, season: 1, airDate: "2024-04-01" }),
-                    recommendations: [
-                        new MultimediaItem({ title: "Similar Show", url: `${manifest.baseUrl}/similar`, posterUrl: "https://placehold.co/400x600", type: "series" })
-                    ],
-                    playbackPolicy: "none", // 'none' | 'VPN Recommended' | 'torrent' | 'externalPlayerOnly' | 'internalPlayerOnly'
-                    syncData: { "my_service_id": "12345" }, // Optional: external metadata sync
-                    streams: [
-                        // Optional: "Instant Load" - bypass loadStreams by providing links here
-                        new StreamResult({ url: "https://example.com/movie.mp4", source: "Instant High" })
-                    ],
-                    headers: { "Referer": `${manifest.baseUrl}` }, 
-                    episodes: [
-                        new Episode({ 
-                            name: "Episode 1", 
-                            url: `${manifest.baseUrl}/watch/1`, 
-                            season: 1, 
-                            episode: 1, 
-                            description: "Episode summary...", 
-                            posterUrl: `https://placehold.co/400x600.png?text=Episode+Poster`,
-                            headers: { "Referer": `${manifest.baseUrl}` },
-                            dubStatus: "sub",
-                            streams: [] // Optional: "Instant Load" for episodes
-                        }),
-                        new Episode({ 
-                            name: "Episode 2", 
-                            url: `${manifest.baseUrl}/watch/2`, 
-                            season: 1, 
-                            episode: 2, 
-                            description: "Next episode summary...", 
-                            posterUrl: `https://placehold.co/400x600.png?text=Episode+Poster`,
-                            headers: { "Referer": `${manifest.baseUrl}` },
-                            dubStatus: "sub"
-                        })
-                    ]
-                })
+            const res = await axios.get(url, { headers });
+            const html = res.data;
+            const dom = new JSDOM(html);
+            const doc = dom.window.document;
+
+            const title = doc.querySelector('.anisc-detail .film-name')?.textContent.trim();
+            const description = doc.querySelector('.film-description .text')?.textContent.trim();
+            const posterUrl = doc.querySelector('.film-poster img')?.getAttribute('src');
+            
+            let movieId = html.match(/var movie\s*=\s*{[^}]*id:\s*"(\d+)"/)?.[1];
+            if (!movieId) {
+                movieId = doc.querySelector('.film-poster-ahref')?.getAttribute('data-id') || doc.querySelector('[data-id]')?.getAttribute('data-id');
+            }
+
+            const episodes = [];
+            if (movieId) {
+                const epRes = await axios.get(`${baseUrl}/engine/ajax/full-story.php?newsId=${movieId}&d=${Date.now()}`, { headers });
+                if (epRes.data && epRes.data.status) {
+                    const epDom = new JSDOM(epRes.data.html);
+                    const epDoc = epDom.window.document;
+                    queryAll(epDoc, '.ep-item').forEach((el) => {
+                        const epTitle = el.getAttribute('title') || el.textContent.trim();
+                        const epUrl = el.getAttribute('href');
+                        if (epUrl) {
+                            episodes.push({
+                                title: epTitle,
+                                url: epUrl.startsWith('http') ? epUrl : baseUrl + epUrl
+                            });
+                        }
+                    });
+                }
+            }
+
+            cb({
+                title,
+                description,
+                posterUrl: posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl),
+                episodes
             });
         } catch (e) {
-            cb({ success: false, errorCode: "LOAD_ERROR", message: e.stack });
+            console.error(e);
+            cb(null);
         }
     }
 
-    /**
-     * Resolves streams for a specific media item or episode.
-     * @param {string} url
-     * @param {(res: Response) => void} cb 
-     */
     async function loadStreams(url, cb) {
         try {
-            // Standard: Return a List of stream objects
-            cb({ 
-                success: true, 
-                data: [
-                    new StreamResult({ 
-                        url: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", 
-                        source: "Direct Quality", 
-                        headers: { "Referer": `${manifest.baseUrl}` }
-                    })
-                ] 
-            });
+            const res = await axios.get(url, { headers });
+            const html = res.data;
+            const streams = [];
+
+            const serverRegex = /<div class="item server-item" data-class="([^"]*)" data-type="([^"]*)" data-id="([^"]*)" data-server-id="([^"]*)" data-embed="([^"]*)">/g;
+            let match;
+            while ((match = serverRegex.exec(html)) !== null) {
+                const serverId = match[4];
+                const embedUrl = match[5];
+                
+                const contentPlayerRegex = new RegExp(`id="content_player_${serverId}">([^<]*)<`, 'i');
+                const cpMatch = html.match(contentPlayerRegex);
+                let playerUrl = cpMatch ? cpMatch[1].trim() : embedUrl;
+
+                if (playerUrl) {
+                    let serverName = 'Server ' + serverId;
+                    const nameRegex = new RegExp(`data-server-id="${serverId}"[^>]*>[^<]*<a[^>]*class="btn">([^<]*)<`, 'i');
+                    const nameMatch = html.match(nameRegex);
+                    if (nameMatch) serverName = nameMatch[1].trim();
+
+                    streams.push({
+                        url: playerUrl,
+                        quality: serverName,
+                        headers: {
+                            'Referer': baseUrl
+                        }
+                    });
+                }
+            }
+
+            cb(streams);
         } catch (e) {
-            cb({ success: false, errorCode: "STREAM_ERROR", message: String(e) });
+            console.error(e);
+            cb([]);
         }
     }
 
-    // Export to global scope for namespaced IIFE capture
     globalThis.getHome = getHome;
     globalThis.search = search;
     globalThis.load = load;

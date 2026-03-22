@@ -2,7 +2,7 @@
   "packageName": "com.gowaru.kaisen.franime",
   "name": "FRAnime",
   "version": 1,
-  "baseUrl": "https://franime.fr",
+  "baseUrl": "https://franime.fr/",
   "description": "FRAnime - Streaming anime VF & VOSTFR",
   "authors": [
     "Gowaru"

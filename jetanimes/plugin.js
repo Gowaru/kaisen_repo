@@ -1,197 +1,265 @@
-(function() {
-    /**
-     * @typedef {Object} Response
-     * @property {boolean} success
-     * @property {any} [data]
-     * @property {string} [errorCode]
-     * @property {string} [message]
-     */
-
-    /**
-     * @type {import('@skystream/sdk').Manifest}
-     */
-    // var manifest is injected at runtime
-
-    // 1. (Optional) Register your plugin settings
-    //     registerSettings([
-    //         { id: "quality", name: "Default Quality", type: "select", options: ["1080p", "720p"], default: "1080p" },
-    //         { id: "prefer_dub", name: "Prefer Dubbed", type: "toggle", default: false }
-    //     ]);
+(function () {
+    const baseUrl = manifest.baseUrl;
 
     /**
      * Loads the home screen categories.
-     * @param {(res: Response) => void} cb 
      */
     async function getHome(cb) {
-        // Example: Using solveCaptcha if needed (await solveCaptcha(siteKey, url))
         try {
-            // Dashboard Layout:
-            // - "Trending" is a reserved category promoted to the Hero Carousel.
-            // - Other categories appear as horizontal thumbnail rows.
-            // - If "Trending" is missing, the first category is used for the carousel.
-            cb({ 
-                success: true, 
-                data: { 
-                    "Trending": [
-                        new MultimediaItem({ 
-                            title: "Example Movie (Carousel)", 
-                            url: `${manifest.baseUrl}/movie`, 
-                            posterUrl: `https://placehold.co/400x600.png?text=Trending+Movie`, 
-                            type: "movie", // Valid types: movie, series, anime, livestream, other
-                            bannerUrl: `https://placehold.co/1280x720.png?text=Trending+Banner`, // (optional)
-                            description: "Plot summary here...", // (optional)
-                            headers: { "Referer": `${manifest.baseUrl}` } // (optional)
-                        })
-                    ],
-                    "Latest Series": [
-                        new MultimediaItem({ 
-                            title: "Example Series (Thumb)", 
-                            url: `${manifest.baseUrl}/series`, 
-                            posterUrl: `https://placehold.co/400x600.png?text=Series+Poster`, 
-                            type: "series",
-                            description: "This category appears as a thumbnail row."
-                        })
-                    ]
-                } 
-            });
-        } catch (e) {
-            cb({ success: false, errorCode: "PARSE_ERROR", message: e.stack });
+            const response = await axios.get(baseUrl);
+            const html = response.data;
+
+            const data = {};
+
+            // Helper to clean entities
+            const clean = (str) => {
+                if (!str) return "";
+                return str.replace(/&#([0-9]+);/g, (m, c) => String.fromCharCode(c))
+                          .replace(/&rsquo;/g, "'")
+                          .replace(/&amp;/g, "&")
+                          .replace(/&quot;/g, '"')
+                          .trim();
+            };
+
+            // 1. Featured / Vedette (post-featured)
+            const featured = [];
+            const articleRegex = /<article id="post-featured-(\d+)" class="item (?:movies|tvshows)">([\s\S]*?)<\/article>/gi;
+            let match;
+            while ((match = articleRegex.exec(html)) !== null) {
+                const artHtml = match[2];
+                const imgMatch = artHtml.match(/<img src="([^"]+)"/);
+                const urlMatch = artHtml.match(/<a href="([^"]+)"/);
+                const titleMatch = artHtml.match(/<h3><a [^>]*>([^<]+)<\/a><\/h3>/);
+                
+                if (urlMatch && imgMatch) {
+                    featured.push(new MultimediaItem({
+                        url: urlMatch[1],
+                        posterUrl: imgMatch[1],
+                        title: clean(titleMatch ? titleMatch[1] : ""),
+                        type: "anime"
+                    }));
+                }
+            }
+            if (featured.length > 0) data["Séries en Vedette"] = featured;
+
+            // 2. Main sections by headers
+            // Split by h2 to group sections
+            const segments = html.split(/<h2[^>]*>/);
+            for (let i = 1; i < segments.length; i++) {
+                const seg = segments[i];
+                const headerEnd = seg.indexOf('</h2>');
+                if (headerEnd === -1) continue;
+                
+                const title = clean(seg.substring(0, headerEnd));
+                if (title.includes("Années") || title.includes("Propositions")) continue;
+                
+                const items = [];
+                const itemRegex = /<article id="post-(\d+)" class="item (?:movies|tvshows|se episodes|se seasons)"[^>]*>([\s\S]*?)<\/article>/gi;
+                let itMatch;
+                while ((itMatch = itemRegex.exec(seg)) !== null) {
+                    const itHtml = itMatch[2];
+                    const imgMatch = itHtml.match(/<img src="([^"]+)"/);
+                    const urlMatch = itHtml.match(/<a href="([^"]+)"/);
+                    const serieMatch = itHtml.match(/<span class="serie">([^<]+)<\/span>/);
+                    const epNameMatch = itHtml.match(/<h3><a [^>]*>([^<]+)<\/a><\/h3>/);
+
+                    if (urlMatch && imgMatch) {
+                        let finalTitle = "";
+                        if (serieMatch && epNameMatch) {
+                            finalTitle = serieMatch[1] + " " + epNameMatch[1];
+                        } else {
+                            finalTitle = (epNameMatch ? epNameMatch[1] : "");
+                        }
+                        
+                        items.push(new MultimediaItem({
+                            url: urlMatch[1],
+                            posterUrl: imgMatch[1],
+                            title: clean(finalTitle),
+                            type: "anime"
+                        }));
+                    }
+                }
+                
+                if (items.length > 0) {
+                    data[title] = items;
+                }
+            }
+
+            cb({ success: true, data });
+        } catch (error) {
+            cb({ success: false, errorCode: "HOME_ERROR", message: error.message });
         }
     }
 
     /**
      * Searches for media items.
-     * @param {string} query
-     * @param {(res: Response) => void} cb 
      */
     async function search(query, cb) {
         try {
-            // Standard: Return a List of items
-            // Samples show both a movie and a series
-            cb({ 
-                success: true, 
-                data: [
-                        new MultimediaItem({ 
-                            title: "Example Movie (Search Result)", 
-                            url: `${manifest.baseUrl}/movie`, 
-                            posterUrl: `https://placehold.co/400x600.png?text=Search+Movie`, 
-                            type: "movie", 
-                            bannerUrl: `https://placehold.co/1280x720.png?text=Search+Banner`,
-                            description: "Plot summary here...", 
-                            headers: { "Referer": `${manifest.baseUrl}` } 
-                        }),
-                        new MultimediaItem({ 
-                            title: "Example Series (Search Result)", 
-                            url: `${manifest.baseUrl}/series`, 
-                            posterUrl: `https://placehold.co/400x600.png?text=Search+Series`, 
-                            type: "series", 
-                            description: "A series found in search.", 
-                            headers: { "Referer": `${manifest.baseUrl}` } 
-                        })
-                ] 
-            });
-        } catch (e) {
-            cb({ success: false, errorCode: "SEARCH_ERROR", message: e.stack });
+            const homeRes = await axios.get(baseUrl);
+            const homeHtml = homeRes.data;
+            
+            const nonceMatch = homeHtml.match(/"nonce":"([^"]+)"/);
+            if (!nonceMatch) throw new Error("Search nonce not found");
+            const nonce = nonceMatch[1];
+            
+            const searchUrl = `${baseUrl}/wp-json/dooplay/search/?keyword=${encodeURIComponent(query)}&nonce=${nonce}`;
+            const res = await axios.get(searchUrl);
+            const json = res.data;
+            
+            const results = [];
+            for (const key in json) {
+                const item = json[key];
+                if (item && item.title) {
+                    results.push(new MultimediaItem({
+                        title: item.title,
+                        url: item.url,
+                        posterUrl: item.img,
+                        type: "anime"
+                    }));
+                }
+            }
+            cb({ success: true, data: results });
+        } catch (error) {
+            cb({ success: false, errorCode: "SEARCH_ERROR", message: error.message });
         }
     }
 
     /**
      * Loads details for a specific media item.
-     * @param {string} url
-     * @param {(res: Response) => void} cb 
      */
     async function load(url, cb) {
         try {
-            // Standard: Return a single item with full metadata
-            // Sample shows a series with episodes
-            cb({ 
-                success: true, 
+            const response = await axios.get(url);
+            const html = response.data;
+
+            const title = (html.match(/<h1>([^<]+)<\/h1>/) || [])[1] || "Titre inconnu";
+            const descriptionMatch = html.match(/<div class="wp-content">\s*<p>([\s\S]*?)<\/p>/);
+            const description = descriptionMatch ? descriptionMatch[1].replace(/<[^>]+>/g, "").trim() : "";
+            const posterUrl = (html.match(/<div class="poster">\s*<img itemprop="image" src="([^"]+)"/) || [])[1] || "";
+            const yearStr = (html.match(/<span class="date" itemprop="dateCreated">([^<]+)<\/span>/) || [])[1] || "";
+            const year = parseInt(yearStr.match(/\d{4}/)?.[0]) || 0;
+
+            const episodes = [];
+            const seasonRegex = /<div class='se-c'>\s*<div class='se-q'>\s*<span class='se-t[^']*'>([0-9]+)<\/span>([\s\S]*?)<ul class='episodios'>([\s\S]*?)<\/ul>/gi;
+            let seasonMatch;
+            while ((seasonMatch = seasonRegex.exec(html)) !== null) {
+                const seasonNum = parseInt(seasonMatch[1]);
+                const blockHtml = seasonMatch[3];
+                const episodeRegex = /<li[^>]*>\s*<div class='imagen'><img src='([^']*)'><\/div>\s*<div class='numerando'>(\d+)\s*-\s*([0-9.]+)<\/div>\s*<div class='episodiotitle'>\s*<a href='([^']+)'>([^<]+)<\/a>/gi;
+                let epMatch;
+                while ((epMatch = episodeRegex.exec(blockHtml)) !== null) {
+                    episodes.push(new Episode({
+                        name: epMatch[5].trim(),
+                        url: epMatch[4],
+                        posterUrl: epMatch[1],
+                        episode: parseInt(Math.floor(parseFloat(epMatch[3]))),
+                        season: seasonNum
+                    }));
+                }
+            }
+
+            if (episodes.length === 0) {
+                episodes.push(new Episode({ name: "Film / Episode", url, episode: 1, season: 1 }));
+            }
+
+            cb({
+                success: true,
                 data: new MultimediaItem({
-                    title: "Example Series Full Details",
-                    url: url,
-                    posterUrl: `https://placehold.co/400x600.png?text=Series+Details`,
-                    type: "series", 
-                    bannerUrl: `https://placehold.co/1280x720.png?text=Series+Banner`,
-                    description: "This is a detailed description of the media.", 
-                    year: 2024,
-                    score: 8.5,
-                    duration: 120, // (optional, in minutes)
-                    status: "ongoing", // ongoing, completed, upcoming
-                    contentRating: "PG-13",
-                    logoUrl: `https://placehold.co/200x100.png?text=Logo`,
-                    isAdult: false,
-                    tags: ["Action", "Adventure"],
-                    cast: [
-                        new Actor({ name: "John Doe", role: "Protagonist", image: "https://placehold.co/200x300.png" })
-                    ],
-                    trailers: [
-                        new Trailer({ name: "Official Trailer", url: "https://www.youtube.com/watch?v=..." })
-                    ],
-                    nextAiring: new NextAiring({ episode: 5, season: 1, airDate: "2024-04-01" }),
-                    recommendations: [
-                        new MultimediaItem({ title: "Similar Show", url: `${manifest.baseUrl}/similar`, posterUrl: "https://placehold.co/400x600", type: "series" })
-                    ],
-                    playbackPolicy: "none", // 'none' | 'VPN Recommended' | 'torrent' | 'externalPlayerOnly' | 'internalPlayerOnly'
-                    syncData: { "my_service_id": "12345" }, // Optional: external metadata sync
-                    streams: [
-                        // Optional: "Instant Load" - bypass loadStreams by providing links here
-                        new StreamResult({ url: "https://example.com/movie.mp4", source: "Instant High" })
-                    ],
-                    headers: { "Referer": `${manifest.baseUrl}` }, 
-                    episodes: [
-                        new Episode({ 
-                            name: "Episode 1", 
-                            url: `${manifest.baseUrl}/watch/1`, 
-                            season: 1, 
-                            episode: 1, 
-                            description: "Episode summary...", 
-                            posterUrl: `https://placehold.co/400x600.png?text=Episode+Poster`,
-                            headers: { "Referer": `${manifest.baseUrl}` },
-                            dubStatus: "sub",
-                            streams: [] // Optional: "Instant Load" for episodes
-                        }),
-                        new Episode({ 
-                            name: "Episode 2", 
-                            url: `${manifest.baseUrl}/watch/2`, 
-                            season: 1, 
-                            episode: 2, 
-                            description: "Next episode summary...", 
-                            posterUrl: `https://placehold.co/400x600.png?text=Episode+Poster`,
-                            headers: { "Referer": `${manifest.baseUrl}` },
-                            dubStatus: "sub"
-                        })
-                    ]
+                    title: title.trim(),
+                    description: description,
+                    posterUrl,
+                    year,
+                    episodes,
+                    type: episodes.length > 2 ? "series" : "movie"
                 })
             });
-        } catch (e) {
-            cb({ success: false, errorCode: "LOAD_ERROR", message: e.stack });
+        } catch (error) {
+            cb({ success: false, errorCode: "LOAD_ERROR", message: error.message });
         }
     }
 
     /**
      * Resolves streams for a specific media item or episode.
-     * @param {string} url
-     * @param {(res: Response) => void} cb 
      */
     async function loadStreams(url, cb) {
         try {
-            // Standard: Return a List of stream objects
-            cb({ 
-                success: true, 
-                data: [
-                    new StreamResult({ 
-                        url: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", 
-                        source: "Direct Quality", 
-                        headers: { "Referer": `${manifest.baseUrl}` }
-                    })
-                ] 
-            });
-        } catch (e) {
-            cb({ success: false, errorCode: "STREAM_ERROR", message: String(e) });
+            const response = await axios.get(url, { headers: { 'Referer': baseUrl } });
+            const html = response.data;
+
+            // Robust post ID extraction
+            const postIdMatch = html.match(/postid-(\d+)/) || html.match(/id="([^"]*player[^"]*)"[^>]*data-post="(\d+)"/);
+            if (!postIdMatch) throw new Error("ID du post non trouvé");
+            const postId = postIdMatch[1] || postIdMatch[2];
+            
+            const streams = [];
+            // Try both 'tv' and 'movie' types as DooPlay can be inconsistent
+            const types = url.includes('/episodes/') ? ['tv', 'movie'] : ['movie', 'tv'];
+
+            for (const type of types) {
+                for (let nume = 1; nume <= 10; nume++) {
+                    try {
+                        // Manually construct form data string to avoid URLSearchParams issues
+                        const params = "action=doo_player_ajax&post=" + postId + "&nume=" + nume + "&type=" + type;
+                        
+                        const ajaxRes = await axios.post(`${baseUrl}/wp-admin/admin-ajax.php`, params, {
+                            headers: { 
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Referer': url
+                            }
+                        });
+                        
+                        if (ajaxRes.status === 200 && ajaxRes.data) {
+                            const embedData = ajaxRes.data;
+                            if (embedData && embedData.embed_url) {
+                                let embedUrl = embedData.embed_url.trim();
+                                // Extraction if embed_url is an iframe string
+                                if (embedUrl.includes('<iframe')) {
+                                    const srcMatch = embedUrl.match(/src=["'](.*?)["']/);
+                                    if (srcMatch) embedUrl = srcMatch[1];
+                                }
+                                
+                                if (embedUrl && embedUrl !== "false") {
+                                    if (embedUrl.startsWith('//')) embedUrl = 'https:' + embedUrl;
+                                    
+                                    let hostName = "Lecteur " + nume;
+                                    try { hostName = new URL(embedUrl).hostname.replace('www.', ''); } catch(e) {}
+                                    
+                                    streams.push(new StreamResult({
+                                        url: embedUrl,
+                                        source: hostName
+                                    }));
+                                } else {
+                                    break; // No more players for this type
+                                }
+                            } else {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    } catch (e) {
+                        break;
+                    }
+                }
+                if (streams.length > 0) break; // Found streams, don't try other type
+            }
+
+            // Final fallback: Look for iframes directly in HTML (rare for DooPlay but safe)
+            if (streams.length === 0) {
+                const ifrMatch = html.match(/<iframe[^>]+src=["'](https?:\/\/[^"']+)["']/i);
+                if (ifrMatch) {
+                    streams.push(new StreamResult({ url: ifrMatch[1], source: "Default Player" }));
+                }
+            }
+
+            cb({ success: true, data: streams });
+        } catch (error) {
+            cb({ success: false, errorCode: "STREAM_ERROR", message: error.message });
         }
     }
 
-    // Export to global scope for namespaced IIFE capture
     globalThis.getHome = getHome;
     globalThis.search = search;
     globalThis.load = load;

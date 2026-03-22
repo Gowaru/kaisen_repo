@@ -73,7 +73,6 @@
     async function search(query, cb) {
         try {
             const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://french-anime.com';
-            
             const params = `do=search&subaction=search&story=${encodeURIComponent(query)}`;
             
             const response = await axios.post(`${baseUrl}/index.php?do=search`, params, {
@@ -83,51 +82,34 @@
                 }
             });
             const html = response.data;
+            const dom = new JSDOM(html);
+            const doc = dom.window.document;
             
             const results = [];
-            // Match <span class="image"><img src="..." alt="..."/></span>\n<div class="title"><a href="...">TITLE</a>
-            const regex = /<span class="image"><img[^>]+src="([^"]+)"[^>]*alt="([^"]*)"[^>]*>[\s\S]*?<div class="title"><a href="(https?:\/\/french-anime[^"]+\.html)">([^<]+)<\/a><\/div>/gi;
-            // General fallback
-            const regex2 = /<a[^>]+href="(https?:\/\/french-anime[^"]+\.html)"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"/gi;
-            
-            let match;
             const seen = new Set();
-            while((match = regex.exec(html)) !== null && results.length < 20) {
-                let poster = match[1];
-                let title = match[4].replace(/[\r\n\t]+/g, ' ').replace(/wiflix/gi, '').trim();
-                let url = match[3];
+
+            const items = Array.from(doc.querySelectorAll('.mov-side'));
+            for (const el of items) {
+                const url = el.getAttribute('href');
+                if (!url || seen.has(url)) continue;
+                seen.add(url);
+
+                const titleEl = el.querySelector('.mov-side-title');
+                const imgEl = el.querySelector('img');
                 
-                if(!poster.startsWith('http')) {
+                let poster = imgEl ? imgEl.getAttribute('src') : '';
+                if (poster && !poster.startsWith('http')) {
                     poster = baseUrl + (poster.startsWith('/') ? '' : '/') + poster;
                 }
-                
-                if(!seen.has(url)) {
-                    seen.add(url);
-                    results.push(new MultimediaItem({
-                        title: title,
-                        url: url,
-                        posterUrl: poster,
-                        type: "anime"
-                    }));
-                }
+
+                results.push(new MultimediaItem({
+                    title: titleEl ? titleEl.textContent.trim().replace(/wiflix/gi, '') : 'French-Anime',
+                    url: url.startsWith('http') ? url : baseUrl + url,
+                    posterUrl: poster,
+                    type: "anime"
+                }));
             }
             
-            if(results.length === 0) {
-                while((match = regex2.exec(html)) !== null && results.length < 15) {
-                    let url = match[1];
-                    let title = (match[3] || "French-Anime").replace(/wiflix/gi, '').trim();
-                    if(!seen.has(url)) {
-                        seen.add(url);
-                        results.push(new MultimediaItem({
-                            title: title,
-                            url: url,
-                            posterUrl: match[2].startsWith('http') ? match[2] : baseUrl + match[2],
-                            type: "anime"
-                        }));
-                    }
-                }
-            }
-
             cb({ success: true, data: results });
         } catch (e) {
             cb({ success: false, errorCode: "SEARCH_ERROR", message: String(e) });
