@@ -5,7 +5,11 @@
             const h = config.headers || {};
             if (typeof http_get !== 'undefined') {
                 const r = await http_get(url, h);
-                return { data: r.body };
+                
+                let parsed = r.body;
+                try { parsed = JSON.parse(r.body); } catch(e) {}
+                return { data: parsed };
+        
             }
             return { data: "" }; // Fallback
         },
@@ -13,7 +17,11 @@
             const h = config.headers || {};
             if (typeof http_post !== 'undefined') {
                 const r = await http_post(url, h, data);
-                return { data: r.body };
+                
+                let parsed = r.body;
+                try { parsed = JSON.parse(r.body); } catch(e) {}
+                return { data: parsed };
+        
             }
             return { data: "" }; // Fallback
         }
@@ -60,7 +68,7 @@
                 }
             });
 
-            cb({ success: true, data: items });
+            cb({ success: true, data: { "Derniers Ajouts": items } });
         } catch (e) {
             console.error(e);
             cb({ success: false, errorCode: "HOME_ERROR", message: e.stack });
