@@ -2,7 +2,7 @@
   "name": "kaisen",
   "packageName": "com.gowaru.kaisen",
   "description": "Collection de plugins anime français pour SkyStream",
-  "manifestVersion": 1,
+  "manifestVersion": 1.1,
   "pluginLists": [
     "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/plugins.json"
   ]
