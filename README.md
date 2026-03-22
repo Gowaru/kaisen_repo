@@ -18,8 +18,9 @@ SkyStream uses a repository system to fetch plugins. Follow these steps to activ
 1.  Open the app and navigate to **Settings**.
 2.  Select the **Manage Extensions** menu.
 3.  Click on the **Add Repository** button.
-4.  Enter the following Repository URL:
+4.  Enter the following Repository URL or shortcode:
     > **Repository URL:** `https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/repo.json`
+    > **ShortCode:** `https://bit.ly/kaisen-repo`
 5.  Tap **Add**.
 6.  Wait for the list to populate, then **download** the desired plugins.
 
