@@ -4,6 +4,6 @@
   "description": "Collection de plugins anime français pour SkyStream",
   "manifestVersion": 1,
   "pluginLists": [
-    "https://raw.githubusercontent.com/Gowaru/kaisen_repo/master/dist/plugins.json"
+    "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/plugins.json"
   ]
 }

@@ -14,7 +14,7 @@
     "categories": [
       "Anime"
     ],
-    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/master/dist/com.gowaru.kaisen.animesama.sky"
+    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.animesama.sky"
   },
   {
     "packageName": "com.gowaru.kaisen.animesultra",
@@ -31,7 +31,7 @@
     "categories": [
       "Anime"
     ],
-    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/master/dist/com.gowaru.kaisen.animesultra.sky"
+    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.animesultra.sky"
   },
   {
     "packageName": "com.gowaru.kaisen.animevostfr",
@@ -48,7 +48,7 @@
     "categories": [
       "Anime"
     ],
-    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/master/dist/com.gowaru.kaisen.animevostfr.sky"
+    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.animevostfr.sky"
   },
   {
     "packageName": "com.gowaru.kaisen.franime",
@@ -65,7 +65,7 @@
     "categories": [
       "Anime"
     ],
-    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/master/dist/com.gowaru.kaisen.franime.sky"
+    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.franime.sky"
   },
   {
     "packageName": "com.gowaru.kaisen.frenchanime",
@@ -82,7 +82,7 @@
     "categories": [
       "Anime"
     ],
-    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/master/dist/com.gowaru.kaisen.frenchanime.sky"
+    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.frenchanime.sky"
   },
   {
     "packageName": "com.gowaru.kaisen.jetanimes",
@@ -99,7 +99,7 @@
     "categories": [
       "Anime"
     ],
-    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/master/dist/com.gowaru.kaisen.jetanimes.sky"
+    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.jetanimes.sky"
   },
   {
     "packageName": "com.gowaru.kaisen.sekai",
@@ -116,7 +116,7 @@
     "categories": [
       "Anime"
     ],
-    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/master/dist/com.gowaru.kaisen.sekai.sky"
+    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.sekai.sky"
   },
   {
     "packageName": "com.gowaru.kaisen.voiranime",
@@ -133,7 +133,7 @@
     "categories": [
       "Anime"
     ],
-    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/master/dist/com.gowaru.kaisen.voiranime.sky"
+    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.voiranime.sky"
   },
   {
     "packageName": "com.gowaru.kaisen.vostfree",
@@ -150,6 +150,6 @@
     "categories": [
       "Anime"
     ],
-    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/master/dist/com.gowaru.kaisen.vostfree.sky"
+    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.vostfree.sky"
   }
 ]
