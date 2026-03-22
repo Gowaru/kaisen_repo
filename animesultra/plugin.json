@@ -1,7 +1,7 @@
 {
   "packageName": "com.gowaru.kaisen.animesultra",
   "name": "AnimesUltra",
-  "version": 1.2,
+  "version": 2.0,
   "baseUrl": "https://ww.animesultra.org",
   "description": "AnimesUltra - Streaming anime VF & VOSTFR",
   "authors": [
