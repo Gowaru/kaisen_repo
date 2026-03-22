@@ -1,0 +1,16 @@
+{
+  "packageName": "com.gowaru.kaisen.animesultra",
+  "name": "AnimesUltra",
+  "version": 1,
+  "baseUrl": "https://animesultra.org",
+  "description": "AnimesUltra - Streaming anime VF & VOSTFR",
+  "authors": [
+    "Gowaru"
+  ],
+  "languages": [
+    "fr"
+  ],
+  "categories": [
+    "Anime"
+  ]
+}

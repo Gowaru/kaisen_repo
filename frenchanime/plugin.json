@@ -1,0 +1,16 @@
+{
+  "packageName": "com.gowaru.kaisen.frenchanime",
+  "name": "French-Anime",
+  "version": 1,
+  "baseUrl": "https://french-anime.com",
+  "description": "French-Anime - Animes VF et VOSTFR en streaming",
+  "authors": [
+    "Gowaru"
+  ],
+  "languages": [
+    "fr"
+  ],
+  "categories": [
+    "Anime"
+  ]
+}

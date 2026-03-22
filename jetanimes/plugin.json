@@ -1,0 +1,16 @@
+{
+  "packageName": "com.gowaru.kaisen.jetanimes",
+  "name": "JetAnimes",
+  "version": 1,
+  "baseUrl": "https://on.jetanimes.com",
+  "description": "JetAnimes - Streaming anime VF & VOSTFR",
+  "authors": [
+    "Gowaru"
+  ],
+  "languages": [
+    "fr"
+  ],
+  "categories": [
+    "Anime"
+  ]
+}

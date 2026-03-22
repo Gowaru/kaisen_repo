@@ -1,0 +1,16 @@
+{
+  "packageName": "com.gowaru.kaisen.animevostfr",
+  "name": "AnimeVOSTFR",
+  "version": 1,
+  "baseUrl": "https://animevostfr.org",
+  "description": "AnimeVOSTFR - Streaming anime VOSTFR",
+  "authors": [
+    "Gowaru"
+  ],
+  "languages": [
+    "fr"
+  ],
+  "categories": [
+    "Anime"
+  ]
+}

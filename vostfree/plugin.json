@@ -1,0 +1,16 @@
+{
+  "packageName": "com.gowaru.kaisen.vostfree",
+  "name": "Vostfree",
+  "version": 1,
+  "baseUrl": "https://vostfree.ws",
+  "description": "Vostfree - Animes VF et VOSTFR en streaming",
+  "authors": [
+    "Gowaru"
+  ],
+  "languages": [
+    "fr"
+  ],
+  "categories": [
+    "Anime"
+  ]
+}

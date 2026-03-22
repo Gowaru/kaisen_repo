@@ -1,0 +1,16 @@
+{
+  "packageName": "com.gowaru.kaisen.sekai",
+  "name": "Sekai",
+  "version": 1,
+  "baseUrl": "https://sekai.one",
+  "description": "Sekai - Streaming anime VF & VOSTFR",
+  "authors": [
+    "Gowaru"
+  ],
+  "languages": [
+    "fr"
+  ],
+  "categories": [
+    "Anime"
+  ]
+}
