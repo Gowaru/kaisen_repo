@@ -19,7 +19,7 @@
   {
     "packageName": "com.gowaru.kaisen.animesultra",
     "name": "AnimesUltra",
-    "version": 1.1,
+    "version": 1.2,
     "baseUrl": "https://ww.animesultra.org",
     "description": "AnimesUltra - Streaming anime VF & VOSTFR",
     "authors": [
@@ -87,7 +87,7 @@
   {
     "packageName": "com.gowaru.kaisen.jetanimes",
     "name": "JetAnimes",
-    "version": 1,
+    "version": 1.1,
     "baseUrl": "https://on.jetanimes.com",
     "description": "JetAnimes - Streaming anime VF & VOSTFR",
     "authors": [
@@ -121,7 +121,7 @@
   {
     "packageName": "com.gowaru.kaisen.voiranime",
     "name": "VoirAnime",
-    "version": 1,
+    "version": 1.1,
     "baseUrl": "https://v6.voiranime.com/",
     "description": "VoirAnime - Streaming anime VF & VOSTFR",
     "authors": [
