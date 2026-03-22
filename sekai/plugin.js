@@ -1,4 +1,24 @@
 (function() {
+
+    const axios = {
+        get: async (url, config = {}) => {
+            const h = config.headers || {};
+            if (typeof http_get !== 'undefined') {
+                const r = await http_get(url, h);
+                return { data: r.body };
+            }
+            return { data: "" }; // Fallback
+        },
+        post: async (url, data, config = {}) => {
+            const h = config.headers || {};
+            if (typeof http_post !== 'undefined') {
+                const r = await http_post(url, h, data);
+                return { data: r.body };
+            }
+            return { data: "" }; // Fallback
+        }
+    };
+
     const baseUrl = 'https://sekai.one';
     const headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -10,8 +30,7 @@
         try {
             const res = await axios.get(baseUrl + '/?v=15', { headers });
             const html = res.data;
-            const dom = new JSDOM(html);
-            const doc = dom.window.document;
+            const doc = await parseHtml(html);
             const items = [];
 
             const links = Array.from(doc.querySelectorAll('a[href]'));
@@ -47,8 +66,7 @@
             // Re-use home scraping and filter
             const res = await axios.get(baseUrl + '/?v=15', { headers });
             const html = res.data;
-            const dom = new JSDOM(html);
-            const doc = dom.window.document;
+            const doc = await parseHtml(html);
             const items = [];
 
             const links = Array.from(doc.querySelectorAll('a[href]'));
@@ -81,8 +99,7 @@
         try {
             const res = await axios.get(url, { headers });
             const html = res.data;
-            const dom = new JSDOM(html);
-            const doc = dom.window.document;
+            const doc = await parseHtml(html);
 
             const title = doc.querySelector('title')?.textContent.replace('Sekai', '').trim();
             const description = doc.querySelector('meta[property="og:description"]')?.getAttribute('content');

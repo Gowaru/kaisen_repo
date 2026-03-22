@@ -1,4 +1,24 @@
 (function() {
+
+    const axios = {
+        get: async (url, config = {}) => {
+            const h = config.headers || {};
+            if (typeof http_get !== 'undefined') {
+                const r = await http_get(url, h);
+                return { data: r.body };
+            }
+            return { data: "" }; // Fallback
+        },
+        post: async (url, data, config = {}) => {
+            const h = config.headers || {};
+            if (typeof http_post !== 'undefined') {
+                const r = await http_post(url, h, data);
+                return { data: r.body };
+            }
+            return { data: "" }; // Fallback
+        }
+    };
+
     const apiBase = "https://api.franime.fr/api/animes/";
     const headers = { 'User-Agent': 'Mozilla/5.0' };
 

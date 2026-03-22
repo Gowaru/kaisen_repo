@@ -1,4 +1,24 @@
 (function() {
+
+    const axios = {
+        get: async (url, config = {}) => {
+            const h = config.headers || {};
+            if (typeof http_get !== 'undefined') {
+                const r = await http_get(url, h);
+                return { data: r.body };
+            }
+            return { data: "" }; // Fallback
+        },
+        post: async (url, data, config = {}) => {
+            const h = config.headers || {};
+            if (typeof http_post !== 'undefined') {
+                const r = await http_post(url, h, data);
+                return { data: r.body };
+            }
+            return { data: "" }; // Fallback
+        }
+    };
+
     const headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
@@ -19,8 +39,7 @@
         try {
             const url = manifest.baseUrl;
             const res = await axios.get(url, { headers });
-            const dom = new JSDOM(res.data);
-            const doc = dom.window.document;
+            const doc = await parseHtml(res.data);
             const items = [];
 
             // Targeted selectors for AnimeVOSTFR (Toroplay)
@@ -53,8 +72,7 @@
         try {
             const url = `${manifest.baseUrl}?s=${encodeURIComponent(query)}`;
             const res = await axios.get(url, { headers });
-            const dom = new JSDOM(res.data);
-            const doc = dom.window.document;
+            const doc = await parseHtml(res.data);
             const items = [];
 
             const entries = doc.querySelectorAll('.item, .box');
@@ -85,8 +103,7 @@
     async function load(url, cb) {
         try {
             const res = await axios.get(url, { headers });
-            const dom = new JSDOM(res.data);
-            const doc = dom.window.document;
+            const doc = await parseHtml(res.data);
 
             const title = doc.querySelector('.title')?.textContent.trim() || '';
             const description = doc.querySelector('.description')?.textContent.trim() || '';
@@ -124,8 +141,7 @@
     async function loadStreams(url, cb) {
         try {
             const res = await axios.get(url, { headers });
-            const dom = new JSDOM(res.data);
-            const doc = dom.window.document;
+            const doc = await parseHtml(res.data);
             const streams = [];
 
             const iframes = doc.querySelectorAll('iframe[src*="streamtape"], iframe[src*="vidoza"], iframe[src*="dood"], iframe[src*="embed"]');

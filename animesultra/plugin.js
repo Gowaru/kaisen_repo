@@ -1,4 +1,24 @@
 (function() {
+
+    const axios = {
+        get: async (url, config = {}) => {
+            const h = config.headers || {};
+            if (typeof http_get !== 'undefined') {
+                const r = await http_get(url, h);
+                return { data: r.body };
+            }
+            return { data: "" }; // Fallback
+        },
+        post: async (url, data, config = {}) => {
+            const h = config.headers || {};
+            if (typeof http_post !== 'undefined') {
+                const r = await http_post(url, h, data);
+                return { data: r.body };
+            }
+            return { data: "" }; // Fallback
+        }
+    };
+
     const baseUrl = 'https://ww.animesultra.org';
     const headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -15,8 +35,7 @@
         try {
             const res = await axios.get(baseUrl, { headers });
             const html = res.data;
-            const dom = new JSDOM(html);
-            const doc = dom.window.document;
+            const doc = await parseHtml(html);
             const results = [];
 
             // 1. Trending (Carousel)
@@ -90,8 +109,7 @@
                 }
             });
             const html = res.data;
-            const dom = new JSDOM(html);
-            const doc = dom.window.document;
+            const doc = await parseHtml(html);
             const results = [];
 
             queryAll(doc, '.film_list-wrap .flw-item').forEach((el) => {
@@ -121,8 +139,7 @@
         try {
             const res = await axios.get(url, { headers });
             const html = res.data;
-            const dom = new JSDOM(html);
-            const doc = dom.window.document;
+            const doc = await parseHtml(html);
 
             const title = doc.querySelector('.anisc-detail .film-name')?.textContent.trim();
             const description = doc.querySelector('.film-description .text')?.textContent.trim();
@@ -137,8 +154,7 @@
             if (movieId) {
                 const epRes = await axios.get(`${baseUrl}/engine/ajax/full-story.php?newsId=${movieId}&d=${Date.now()}`, { headers });
                 if (epRes.data && epRes.data.status) {
-                    const epDom = new JSDOM(epRes.data.html);
-                    const epDoc = epDom.window.document;
+                    const epDoc = await parseHtml(epRes.data.html);
                     queryAll(epDoc, '.ep-item').forEach((el) => {
                         const epTitle = el.getAttribute('title') || el.textContent.trim();
                         const epUrl = el.getAttribute('href');
