@@ -1,7 +1,7 @@
 {
   "packageName": "com.gowaru.kaisen.animesama",
   "name": "Anime-Sama",
-  "version": 2.0,
+  "version": 2,
   "baseUrl": "https://anime-sama.to",
   "description": "Anime-Sama - Streaming anime VF & VOSTFR",
   "authors": [
