@@ -43,7 +43,7 @@
     async function getHome(cb) {
         try {
             const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://french-anime.com';
-            const { data: html } = await axios.get(baseUrl);
+            const { data: html } = await http_get(baseUrl);
             
             const results = [];
             
@@ -66,7 +66,7 @@
                 if(!seen.has(url)) {
                     seen.add(url);
                     results.push(new MultimediaItem({
-                        title: title,
+                        title: (title)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
                         url: url,
                         posterUrl: poster,
                         type: "anime"
@@ -103,10 +103,10 @@
             const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://french-anime.com';
             const params = `do=search&subaction=search&story=${encodeURIComponent(query)}`;
             
-            const response = await axios.post(`${baseUrl}/index.php?do=search`, params, {
+            const response = await http_post(`${baseUrl}/index.php?do=search`, params, {
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
-                    'Referer': baseUrl
+                    'Referer': url
                 }
             });
             const html = response.data;
@@ -130,7 +130,7 @@
                 }
 
                 results.push(new MultimediaItem({
-                    title: titleEl ? titleEl.textContent.trim().replace(/wiflix/gi, '') : 'French-Anime',
+                    title: titleEl ? titleEl.textContent.trim().replace(/wiflix/gi, '').replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim() : 'French-Anime',
                     url: url.startsWith('http') ? url : baseUrl + url,
                     posterUrl: poster,
                     type: "anime"
@@ -145,7 +145,7 @@
 
     async function load(url, cb) {
         try {
-            const response = await axios.get(url, { headers: { 'Referer': manifest.baseUrl } });
+            const response = await http_get(url, { headers: { 'Referer': url , 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'} });
             const html = response.data;
             
             // Extract Title
@@ -202,9 +202,9 @@
             cb({ 
                 success: true, 
                 data: new MultimediaItem({
-                    title: title,
+                    title: (title)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
                     url: url,
-                    posterUrl: posterUrl,
+                    posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl),
                     type: eps.length > 1 ? "series" : "movie",
                     episodes: eps
                 })

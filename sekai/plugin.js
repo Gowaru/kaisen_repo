@@ -28,15 +28,18 @@
     };
 
     const baseUrl = manifest.baseUrl;
+    
     const headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Referer': url + '/',
+        'Origin': manifest.baseUrl
     };
 
     async function getHome(cb) {
         try {
-            const res = await axios.get(baseUrl + '/?v=15', { headers });
+            const res = await http_get(baseUrl + '/?v=15', { headers });
             const html = res.data;
             const doc = await parseHtml(html);
             const items = [];
@@ -53,9 +56,9 @@
 
                 if (href && !href.startsWith('http') && !href.startsWith('/') && href !== 'android' && href !== 'contact') {
                     items.push(new MultimediaItem({
-                        title: title || href.split('?')[0].replace(/-/g, ' '),
+                        title: (title || href.split('?')[0].replace(/-/g)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(), ' '),
                         url: baseUrl + '/' + href,
-                        posterUrl: posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : '',
+                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : ''),
                         type: 'anime',
                         playbackPolicy: 'none'
                     }));
@@ -74,9 +77,9 @@
                 if (!items.find(i => i.url === fullUrl)) {
                     if (href && !href.startsWith('http') && !href.startsWith('/') && href !== 'android' && href !== 'contact') {
                         items.push(new MultimediaItem({
-                            title: title,
+                            title: (title)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
                             url: fullUrl,
-                            posterUrl: posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : '',
+                            posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : ''),
                             type: 'anime',
                             playbackPolicy: 'none'
                         }));
@@ -98,7 +101,7 @@
     async function search(query, cb) {
         try {
             // Re-use home scraping and filter
-            const res = await axios.get(baseUrl + '/?v=15', { headers });
+            const res = await http_get(baseUrl + '/?v=15', { headers });
             const html = res.data;
             const doc = await parseHtml(html);
             const items = [];
@@ -118,9 +121,9 @@
                 if (href && !href.startsWith('http') && !href.startsWith('/') && href !== 'android' && href !== 'contact') {
                     if (cleanTitle.toLowerCase().includes(query.toLowerCase())) {
                         items.push(new MultimediaItem({
-                             title: cleanTitle,
+                             title: (cleanTitle)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
                              url: baseUrl + '/' + href,
-                             posterUrl: posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : '',
+                             posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : ''),
                              type: 'anime',
                              playbackPolicy: 'none'
                         }));
@@ -141,9 +144,9 @@
                     if (href && !href.startsWith('http') && !href.startsWith('/') && href !== 'android' && href !== 'contact') {
                         if (title.toLowerCase().includes(query.toLowerCase())) {
                              items.push(new MultimediaItem({
-                                 title: title,
+                                 title: (title)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
                                  url: fullUrl,
-                                 posterUrl: posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : '',
+                                 posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : ''),
                                  type: 'anime',
                                  playbackPolicy: 'none'
                              }));
@@ -160,7 +163,7 @@
 
     async function load(url, cb) {
         try {
-            const res = await axios.get(url, { headers });
+            const res = await http_get(url, { headers });
             const html = res.data;
             const doc = await parseHtml(html);
 
@@ -198,7 +201,7 @@
 
     async function loadStreams(url, cb) {
         try {
-            const res = await axios.get(url, { headers });
+            const res = await http_get(url, { headers });
             const html = res.data;
             const streams = [];
 

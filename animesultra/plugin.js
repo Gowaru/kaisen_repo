@@ -28,10 +28,13 @@
     };
 
     const baseUrl = manifest.baseUrl;
+    
     const headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Referer': url + '/',
+        'Origin': manifest.baseUrl
     };
 
     // Helper to use JSDOM like cheerio-ish (querySelectorAll)
@@ -41,7 +44,7 @@
 
     async function getHome(cb) {
         try {
-            const res = await axios.get(baseUrl, { headers });
+            const res = await http_get(baseUrl, { headers });
             const html = res.data;
             const doc = await parseHtml(html);
             const results = {};
@@ -59,8 +62,8 @@
                     trendingItems.push({
                         title,
                         url: url.startsWith('http') ? url : baseUrl + url,
-                        posterUrl: posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl),
-                        type: 'anime'
+                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
+                        type: 'anime', playbackPolicy: 'none'
                     });
                 }
             });
@@ -80,10 +83,10 @@
                 const ep = epEl?.textContent.trim();
                 if (title && url) {
                     latestItems.push({
-                        title: title + (ep ? ' - ' + ep : ''),
+                        title: (title + (ep ? ' - ' + ep : ''))?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
                         url: url.startsWith('http') ? url : baseUrl + url,
-                        posterUrl: posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl),
-                        type: 'anime'
+                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
+                        type: 'anime', playbackPolicy: 'none'
                     });
                 }
             });
@@ -102,7 +105,7 @@
         try {
             const body = `do=search&subaction=search&story=${encodeURIComponent(query)}`;
 
-            const res = await axios.post(baseUrl + '/index.php?do=search', body, {
+            const res = await http_post(baseUrl + '/index.php?do=search', body, {
                 headers: {
                     ...headers,
                     'Content-Type': 'application/x-www-form-urlencoded'
@@ -122,8 +125,8 @@
                     results.push({
                         title,
                         url: url.startsWith('http') ? url : baseUrl + url,
-                        posterUrl: posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl),
-                        type: 'anime'
+                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
+                        type: 'anime', playbackPolicy: 'none'
                     });
                 }
             });
@@ -137,7 +140,7 @@
 
     async function load(url, cb) {
         try {
-            const res = await axios.get(url, { headers });
+            const res = await http_get(url, { headers });
             const html = res.data;
             const doc = await parseHtml(html);
 
@@ -152,7 +155,7 @@
 
             const episodes = [];
             if (movieId) {
-                const epRes = await axios.get(`${baseUrl}/engine/ajax/full-story.php?newsId=${movieId}&d=${Date.now()}`, { headers });
+                const epRes = await http_get(`${baseUrl}/engine/ajax/full-story.php?newsId=${movieId}&d=${Date.now()}`, { headers });
                 if (epRes.data && epRes.data.status) {
                     const epDoc = await parseHtml(epRes.data.html);
                     queryAll(epDoc, '.ep-item').forEach((el) => {
@@ -174,7 +177,7 @@
                 data: {
                     title,
                     description,
-                    posterUrl: posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl),
+                    posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
                     episodes
                 }
             });
@@ -186,7 +189,7 @@
 
     async function loadStreams(url, cb) {
         try {
-            const res = await axios.get(url, { headers });
+            const res = await http_get(url, { headers });
             const html = res.data;
             const streams = [];
 
@@ -206,13 +209,7 @@
                     const nameMatch = html.match(nameRegex);
                     if (nameMatch) serverName = nameMatch[1].trim();
 
-                    streams.push({
-                        url: playerUrl,
-                        quality: serverName,
-                        headers: {
-                            'Referer': baseUrl
-                        }
-                    });
+                    streams.push(new StreamResult({ url: playerUrl, quality: serverName, headers: {'Referer': url , 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'} }));
                 }
             }
 

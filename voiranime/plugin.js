@@ -46,7 +46,7 @@
     async function getHome(cb) {
         try {
             const url = manifest.baseUrl;
-            const res = await axios.get(url, { headers });
+            const res = await http_get(url, { headers });
             const doc = await parseHtml(res.data);
             const items = [];
 
@@ -78,7 +78,7 @@
     async function search(query, cb) {
         try {
             const url = `${manifest.baseUrl}?s=${encodeURIComponent(query)}`;
-            const res = await axios.get(url, { headers });
+            const res = await http_get(url, { headers });
             const doc = await parseHtml(res.data);
             const items = [];
 
@@ -109,7 +109,7 @@
 
     async function load(url, cb) {
         try {
-            const res = await axios.get(url, { headers });
+            const res = await http_get(url, { headers });
             const doc = await parseHtml(res.data);
 
             const title = doc.querySelector('.entry-title')?.textContent.trim() || '';
@@ -157,7 +157,7 @@
 
     async function loadStreams(url, cb) {
         try {
-            const res = await axios.get(url, { headers });
+            const res = await http_get(url, { headers });
             const doc = await parseHtml(res.data);
             const streams = [];
 

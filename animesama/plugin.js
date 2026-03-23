@@ -30,7 +30,7 @@
     async function getHome(cb) {
         try {
             const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://anime-sama.to';
-            const response = await axios.get(baseUrl);
+            const response = await http_get(baseUrl);
             const html = response.data;
 
             const items = [];
@@ -93,7 +93,7 @@
                  jsUrl = url + 'episodes.js';
             }
             
-            const response = await axios.get(jsUrl);
+            const response = await http_get(jsUrl);
             const jsData = response.data; // Raw JS text
 
             // Parse all var epsX = ['...']

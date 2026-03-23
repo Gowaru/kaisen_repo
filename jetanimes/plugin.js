@@ -34,7 +34,7 @@
      */
     async function getHome(cb) {
         try {
-            const response = await axios.get(baseUrl);
+            const response = await http_get(baseUrl);
             const html = response.data;
 
             const data = {};
@@ -62,8 +62,8 @@
                 if (urlMatch && imgMatch) {
                     featured.push(new MultimediaItem({
                         url: urlMatch[1],
-                        posterUrl: imgMatch[1],
-                        title: clean(titleMatch ? titleMatch[1] : ""),
+                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(imgMatch[1]),
+                        title: (clean(titleMatch ? titleMatch[1] : ""))?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
                         type: "anime"
                     }));
                 }
@@ -101,7 +101,7 @@
                         
                         items.push(new MultimediaItem({
                             url: urlMatch[1],
-                            posterUrl: imgMatch[1],
+                            posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(imgMatch[1]),
                             title: clean(finalTitle),
                             type: "anime"
                         }));
@@ -124,7 +124,7 @@
      */
     async function search(query, cb) {
         try {
-            const homeRes = await axios.get(baseUrl);
+            const homeRes = await http_get(baseUrl);
             const homeHtml = homeRes.data;
             
             const nonceMatch = homeHtml.match(/"nonce":"([^"]+)"/);
@@ -132,7 +132,7 @@
             const nonce = nonceMatch[1];
             
             const searchUrl = `${baseUrl}/wp-json/dooplay/search/?keyword=${encodeURIComponent(query)}&nonce=${nonce}`;
-            const res = await axios.get(searchUrl);
+            const res = await http_get(searchUrl);
             const json = res.data;
             
             const results = [];
@@ -140,9 +140,9 @@
                 const item = json[key];
                 if (item && item.title) {
                     results.push(new MultimediaItem({
-                        title: item.title,
+                        title: (item.title)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
                         url: item.url,
-                        posterUrl: item.img,
+                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(item.img),
                         type: "anime"
                     }));
                 }
@@ -158,7 +158,7 @@
      */
     async function load(url, cb) {
         try {
-            const response = await axios.get(url);
+            const response = await http_get(url);
             const html = response.data;
 
             const title = (html.match(/<h1>([^<]+)<\/h1>/) || [])[1] || "Titre inconnu";
@@ -193,7 +193,7 @@
             cb({
                 success: true,
                 data: new MultimediaItem({
-                    title: title.trim(),
+                    title: (title.trim())?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
                     description: description,
                     posterUrl,
                     year,
@@ -211,7 +211,7 @@
      */
     async function loadStreams(url, cb) {
         try {
-            const response = await axios.get(url, { headers: { 'Referer': baseUrl } });
+            const response = await http_get(url, { headers: { 'Referer': url , 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'} });
             const html = response.data;
 
             // Robust post ID extraction
@@ -229,7 +229,7 @@
                         // Manually construct form data string to avoid URLSearchParams issues
                         const params = "action=doo_player_ajax&post=" + postId + "&nume=" + nume + "&type=" + type;
                         
-                        const ajaxRes = await axios.post(`${baseUrl}/wp-admin/admin-ajax.php`, params, {
+                        const ajaxRes = await http_post(`${baseUrl}/wp-admin/admin-ajax.php`, params, {
                             headers: { 
                                 'Content-Type': 'application/x-www-form-urlencoded',
                                 'X-Requested-With': 'XMLHttpRequest',

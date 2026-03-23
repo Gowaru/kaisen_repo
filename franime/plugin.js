@@ -28,14 +28,21 @@
     };
 
     const apiBase = "https://api.franime.fr/api/animes/";
-    const headers = { 'User-Agent': 'Mozilla/5.0' };
+    
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Referer': url + '/',
+        'Origin': manifest.baseUrl
+    };
 
     async function getHome(cb) {
         try {
-            const res = await axios.get(apiBase, { headers });
+            const res = await http_get(apiBase, { headers });
             const data = res.data;
             const items = data.slice(0, 30).map(anime => ({
-                title: anime.title,
+                title: (anime.title)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
                 url: `https://franime.fr/anime/${anime.id}`,
                 posterUrl: anime.affiche_small || anime.affiche,
                 type: 'anime',
@@ -51,13 +58,13 @@
 
     async function search(query, cb) {
         try {
-            const res = await axios.get(apiBase, { headers });
+            const res = await http_get(apiBase, { headers });
             const data = res.data;
             const items = data.filter(anime => 
                 anime.title.toLowerCase().includes(query.toLowerCase()) || 
                 (anime.originalTitle && anime.originalTitle.toLowerCase().includes(query.toLowerCase()))
             ).map(anime => ({
-                title: anime.title,
+                title: (anime.title)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
                 url: `https://franime.fr/anime/${anime.id}`,
                 posterUrl: anime.affiche_small || anime.affiche,
                 type: 'anime',
@@ -77,7 +84,7 @@
             if (!idMatch) return cb({ success: false, message: "Invalid URL" });
             const id = parseInt(idMatch[1]);
 
-            const res = await axios.get(apiBase, { headers });
+            const res = await http_get(apiBase, { headers });
             const data = res.data;
             const anime = data.find(a => a.id === id);
 
@@ -98,7 +105,7 @@
             cb({
                 success: true,
                 data: {
-                    title: anime.title,
+                    title: (anime.title)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
                     description: anime.description,
                     posterUrl: anime.affiche || anime.affiche_small,
                     episodes
@@ -117,7 +124,7 @@
             if (!match) return cb({ success: false, message: "Invalid Stream URL" });
             const [_, id, sIdx, eIdx] = match;
 
-            const res = await axios.get(apiBase, { headers });
+            const res = await http_get(apiBase, { headers });
             const data = res.data;
             const anime = data.find(a => a.id === parseInt(id));
             if (!anime) return cb({ success: false, message: "Anime not found" });
