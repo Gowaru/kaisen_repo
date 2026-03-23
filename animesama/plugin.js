@@ -25,6 +25,78 @@ const axios = {
         }
     };
 
+    
+    function encodeBase64(str) {
+        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+        let output = "";
+        let i = 0;
+        str = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
+            return String.fromCharCode('0x' + p1);
+        });
+        while (i < str.length) {
+            let chr1 = str.charCodeAt(i++);
+            let chr2 = i < str.length ? str.charCodeAt(i++) : Number.NaN;
+            let chr3 = i < str.length ? str.charCodeAt(i++) : Number.NaN;
+            let enc1 = chr1 >> 2;
+            let enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+            let enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
+            let enc4 = chr3 & 63;
+            if (isNaN(chr2)) enc3 = enc4 = 64;
+            else if (isNaN(chr3)) enc4 = 64;
+            output += chars.charAt(enc1) + chars.charAt(enc2) + chars.charAt(enc3) + chars.charAt(enc4);
+        }
+        return output;
+    }
+
+    const Extractors = {
+        async extractVidoza(url) {
+            try {
+                const res = await axios.get(url);
+                const match = res.data.match(/source\s+src=["'](https?:\/\/[^"']+\.mp4)["']/i);
+                if (match) return { url: match[1], quality: 'Auto', source: 'Vidoza' };
+            } catch (e) {} return null;
+        },
+        async extractSibnet(url) {
+            try {
+                const res = await axios.get(url);
+                const match = res.data.match(/player\.src\(\[\{src:\s*["']([^"']+)["']/i) || res.data.match(/src:\s*["'](\/v\/.*?\.mp4)["']/i);
+                if (match) {
+                    let videoUrl = match[1];
+                    if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                    else if (videoUrl.startsWith('/')) videoUrl = 'https://video.sibnet.ru' + videoUrl;
+                    return { url: videoUrl, quality: 'Auto', source: 'Sibnet', headers: { 'Referer': url } };
+                }
+            } catch (e) {} return null;
+        },
+        async extractSendvid(url) {
+            try {
+                const res = await axios.get(url);
+                const match = res.data.match(/<source\s+src=["']([^"']+\.mp4)["']/i) || res.data.match(/video_source\s*=\s*["']([^"']+)["']/i);
+                if (match) return { url: match[1], quality: 'Auto', source: 'Sendvid' };
+            } catch (e) {} return null;
+        },
+        async resolveStream(url) {
+            if (!url) return null;
+            let finalStream = null;
+            if (url.includes('vidoza.net')) finalStream = await this.extractVidoza(url);
+            else if (url.includes('sibnet.ru')) finalStream = await this.extractSibnet(url);
+            else if (url.includes('sendvid.com')) finalStream = await this.extractSendvid(url);
+            
+            if (finalStream) {
+                return new StreamResult({
+                    url: finalStream.url, quality: finalStream.quality, source: finalStream.source,
+                    headers: finalStream.headers || {}
+                });
+            }
+            if (url.endsWith('.mp4') || url.endsWith('.m3u8')) {
+                let host = 'Unknown'; try { host = new URL(url).hostname; } catch(e) {}
+                return new StreamResult({ url: url, quality: 'Auto', source: host });
+            }
+            return null; // Return null so we can fallback to proxying the direct iframe
+        }
+    };
+
+
     async function getHome(cb) {
         try {
             
@@ -87,6 +159,21 @@ const axios = {
                  jsUrl = url + 'episodes.js';
             }
             
+            let posterUrl = "";
+            let actualTitle = "Anime-Sama";
+            if (!url.endsWith('episodes.js')) {
+                try {
+                    const htmlRes = await axios.get(url);
+                    const html = htmlRes.data;
+                    const imgMatch = html.match(/id="imgOeuvre"[^>]*src="([^"]+)"/i) || html.match(/property="og:image"[^>]*content="([^"]+)"/i);
+                    if(imgMatch) posterUrl = imgMatch[1];
+                    const titleMatch = html.match(/<title>([^<]+)<\/title>/i) || html.match(/<h2[^>]*>([^<]+)<\/h2>/i);
+                    if(titleMatch) {
+                        actualTitle = titleMatch[1].split('- Saison')[0].replace('Anime-Sama', '').replace('|', '').trim();
+                    }
+                } catch(e) {}
+            }
+            
             const response = await axios.get(jsUrl);
             const jsData = response.data; // Raw JS text
 
@@ -133,7 +220,7 @@ const axios = {
 
             // Also try to extract a title from the URL slug
             const parts = url.split('/');
-            let title = "Anime-Sama";
+            let title = actualTitle && actualTitle !== "Anime-Sama" ? actualTitle : "Anime-Sama"; // Fallback URL parsing below if still empty
             for(let p of parts) {
                 if(p !== "catalogue" && p !== "saison1" && p !== "saison2" && p !== "vostfr" && p !== "vf" && p !== "https:" && p !== "anime-sama.to" && p !== "" && p !== "episodes.js") {
                     title = p.replace(/-/g, ' ').toUpperCase();
@@ -147,6 +234,7 @@ const axios = {
                     title: title,
                     url: url.replace('episodes.js', ''),
                     type: "anime",
+                    posterUrl: posterUrl,
                     episodes: eps
                 })
             });
@@ -168,7 +256,6 @@ const axios = {
             const results = [];
             for (let i = 0; i < episodeStreams.length; i++) {
                 const streamUrl = episodeStreams[i];
-                // basic naming heuristic
                 let sourceName = "Lecteur Anime-Sama " + (i + 1);
                 if (streamUrl.includes('sibnet')) sourceName = "Sibnet";
                 else if (streamUrl.includes('sendvid')) sourceName = "Sendvid";
@@ -176,12 +263,25 @@ const axios = {
                 else if (streamUrl.includes('dood')) sourceName = "DoodStream";
                 else if (streamUrl.includes('vidmoly')) sourceName = "Vidmoly";
 
-                results.push(new StreamResult({
-                    url: streamUrl,
-                    source: sourceName
-                }));
+                const extracted = await Extractors.resolveStream(streamUrl);
+                if (extracted) {
+                    extracted.source = sourceName;
+                    results.push(extracted);
+                    
+                    const proxyStream = new StreamResult({
+                        url: "MAGIC_PROXY_v1" + encodeBase64(extracted.url),
+                        source: sourceName + " (Proxy)"
+                    });
+                    if (extracted.headers) proxyStream.headers = extracted.headers;
+                    results.push(proxyStream);
+                } else if(!streamUrl.includes('dood')) { // Dood doesn't work in iframes without extract
+                    results.push(new StreamResult({
+                        url: "MAGIC_PROXY_v1" + encodeBase64(streamUrl),
+                        source: sourceName + " (Plateforme Proxy)"
+                    }));
+                }
             }
-            
+
             cb({ success: true, data: results });
         } catch (e) {
             cb({ success: false, errorCode: "STREAM_ERROR", message: String(e) });
