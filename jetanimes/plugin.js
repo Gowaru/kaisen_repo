@@ -211,7 +211,7 @@
      */
     async function loadStreams(url, cb) {
         try {
-            const response = await http_get(url, { headers: { 'Referer': url , 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'} });
+            const response = await http_get(url, { headers: { 'Referer': baseUrl , 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'} });
             const html = response.data;
 
             // Robust post ID extraction

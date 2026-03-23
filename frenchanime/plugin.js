@@ -106,7 +106,7 @@
             const response = await http_post(`${baseUrl}/index.php?do=search`, params, {
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
-                    'Referer': url
+                    'Referer': baseUrl
                 }
             });
             const html = response.data;
@@ -145,7 +145,7 @@
 
     async function load(url, cb) {
         try {
-            const response = await http_get(url, { headers: { 'Referer': url , 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'} });
+            const response = await http_get(url, { headers: { 'Referer': baseUrl , 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'} });
             const html = response.data;
             
             // Extract Title
