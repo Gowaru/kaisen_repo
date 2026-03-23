@@ -197,6 +197,17 @@ const headers = {
         }
     }
 
+    function decodeBase64(str) {
+        if (typeof atob !== 'undefined') return atob(str);
+        var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+        var output = '';
+        str = String(str).replace(/=+$/, '');
+        for (var bc = 0, bs, buffer, idx = 0; buffer = str.charAt(idx++); ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer, bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0) {
+            buffer = chars.indexOf(buffer);
+        }
+        return output;
+    }
+
     async function loadStreams(url, cb) {
         try {
             const res = await axios.get(url, { headers });
@@ -234,7 +245,8 @@ const headers = {
                     streams.push(new StreamResult({
                         url: muMap[muKey] + basePath + epNum + ".mp4",
                         source: "Sekai " + muKey.replace('mu', 'Server '),
-                        quality: "1080p"
+                        quality: "1080p",
+                        headers: { "Referer": "https://sekai.one/", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" }
                     }));
                 }
             }
@@ -246,7 +258,8 @@ const headers = {
                    streams.push(new StreamResult({
                        url: muMap[s] + slug + "/" + slug + "-" + epNum + ".mp4",
                        source: "Sekai " + s.replace('mu', 'Server '),
-                       quality: "1080p"
+                       quality: "1080p",
+                       headers: { "Referer": "https://sekai.one/", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" }
                    }));
                 });
             }

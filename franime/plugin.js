@@ -141,7 +141,8 @@ const headers = {
                     streams.push(new StreamResult({
                         url: `https://api.franime.fr/api/anime/${id}/${sIdx}/${eIdx}/${lang}/${pIdx}`,
                         quality: lang.toUpperCase(),
-                        source: `FRAnime - ${player}`
+                        source: `FRAnime - ${player}`,
+                        headers: { "Referer": "https://franime.fr/", "Origin": "https://franime.fr", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" }
                     }));
                 });
             }

@@ -207,6 +207,71 @@ const axios = {
     /**
      * Resolves streams for a specific media item or episode.
      */
+    
+    const Extractors = {
+        async extractVidoza(url) {
+            try {
+                const res = await axios.get(url);
+                const match = res.data.match(/source\s+src=["'](https?:\/\/[^"']+\.mp4)["']/i);
+                if (match) return { url: match[1], quality: 'Auto', source: 'Vidoza' };
+            } catch (e) {} return null;
+        },
+        async extractSibnet(url) {
+            try {
+                const res = await axios.get(url);
+                const match = res.data.match(/player\.src\(\[\{src:\s*["']([^"']+)["']/i) || res.data.match(/src:\s*["'](\/v\/.*?\.mp4)["']/i);
+                if (match) {
+                    let videoUrl = match[1];
+                    if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                    else if (videoUrl.startsWith('/')) videoUrl = 'https://video.sibnet.ru' + videoUrl;
+                    return { url: videoUrl, quality: 'Auto', source: 'Sibnet', headers: { 'Referer': url } };
+                }
+            } catch (e) {} return null;
+        },
+        async extractSendvid(url) {
+            try {
+                const res = await axios.get(url);
+                const match = res.data.match(/<source\s+src=["']([^"']+\.mp4)["']/i) || res.data.match(/video_source\s*=\s*["']([^"']+)["']/i);
+                if (match) return { url: match[1], quality: 'Auto', source: 'Sendvid' };
+            } catch (e) {} return null;
+        },
+        async extractStreamtape(url) {
+            try {
+                const res = await axios.get(url);
+                const match = res.data.match(/document\.getElementById\('robotlink'\)\.innerHTML\s*=\s*'\/\/([^']+)'\s*\+\s*'([^']+)'/i);
+                if (match) {
+                    const videoUrl = 'https://' + match[1] + match[2].substring(3);
+                    return { url: videoUrl, quality: 'Auto', source: 'Streamtape' };
+                }
+            } catch (e) {} return null;
+        },
+        async extractUqload(url) {
+            try {
+                const res = await axios.get(url);
+                const match = res.data.match(/sources:\s*\["([^"]+)"\]/i);
+                if (match) return { url: match[1], quality: 'Auto', source: 'Uqload' };
+            } catch (e) {} return null;
+        },
+        async resolveStream(url) {
+            if (!url) return null;
+            let finalStream = null;
+            if (url.includes('vidoza.net')) finalStream = await this.extractVidoza(url);
+            else if (url.includes('sibnet.ru')) finalStream = await this.extractSibnet(url);
+            else if (url.includes('sendvid.com')) finalStream = await this.extractSendvid(url);
+            else if (url.includes('streamtape.com')) finalStream = await this.extractStreamtape(url);
+            else if (url.includes('uqload')) finalStream = await this.extractUqload(url);
+            
+            if (finalStream) {
+                return new StreamResult({
+                    url: finalStream.url, quality: finalStream.quality, source: finalStream.source,
+                    headers: finalStream.headers || {}
+                });
+            }
+            let host = 'Unknown'; try { host = new URL(url).hostname; } catch(e) {}
+            return new StreamResult({ url: url, quality: 'Auto', source: host });
+        }
+    };
+
     async function loadStreams(url, cb) {
         try {
             const response = await axios.get(url, { headers: { 'Referer': baseUrl , 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'} });
@@ -251,10 +316,7 @@ const axios = {
                                     let hostName = "Lecteur " + nume;
                                     try { hostName = new URL(embedUrl).hostname.replace('www.', ''); } catch(e) {}
                                     
-                                    streams.push(new StreamResult({
-                                        url: embedUrl,
-                                        source: hostName
-                                    }));
+                                    streams.push(await Extractors.resolveStream(embedUrl));
                                 } else {
                                     break; // No more players for this type
                                 }
@@ -275,7 +337,7 @@ const axios = {
             if (streams.length === 0) {
                 const ifrMatch = html.match(/<iframe[^>]+src=["'](https?:\/\/[^"']+)["']/i);
                 if (ifrMatch) {
-                    streams.push(new StreamResult({ url: ifrMatch[1], source: "Default Player" }));
+                    streams.push(await Extractors.resolveStream(ifrMatch[1]));
                 }
             }
 

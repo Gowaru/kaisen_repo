@@ -120,12 +120,17 @@ const headers = {
             
             if (epLinks.length > 0) {
                 epLinks.forEach((link, idx) => {
-                    episodes.push({
+                    const epName = link.textContent.trim() || `Épisode ${epLinks.length - idx}`;
+                    const episodeNumMatch = epName.match(/\d+/);
+                    const episodeNum = episodeNumMatch ? parseInt(episodeNumMatch[0], 10) : 0;
+                    
+                    episodes.push(new Episode({
                         season: 1,
-                        name: link.textContent.trim() || `Épisode ${epLinks.length - idx}`, // Correcting reversing order possibly
+                        name: epName,
+                        episode: episodeNum,
                         url: link?.getAttribute('href'),
                         playbackPolicy: 'none'
-                    });
+                    }));
                 });
             }
 
@@ -135,7 +140,7 @@ const headers = {
                     title,
                     description,
                     posterUrl,
-                    episodes: episodes.sort((a, b) => a.episode - b.episode)
+                    episodes: episodes
                 }
             });
         } catch (e) {
@@ -143,6 +148,70 @@ const headers = {
             cb({ success: false, errorCode: "LOAD_ERROR", message: e.stack });
         }
     }
+
+    
+    const Extractors = {
+        async extractVidoza(url) {
+            try {
+                const res = await axios.get(url);
+                const match = res.data.match(/source\s+src=["'](https?:\/\/[^"']+\.mp4)["']/i);
+                if (match) return { url: match[1], quality: 'Auto', source: 'Vidoza' };
+            } catch (e) {} return null;
+        },
+        async extractSibnet(url) {
+            try {
+                const res = await axios.get(url);
+                const match = res.data.match(/player\.src\(\[\{src:\s*["']([^"']+)["']/i) || res.data.match(/src:\s*["'](\/v\/.*?\.mp4)["']/i);
+                if (match) {
+                    let videoUrl = match[1];
+                    if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                    else if (videoUrl.startsWith('/')) videoUrl = 'https://video.sibnet.ru' + videoUrl;
+                    return { url: videoUrl, quality: 'Auto', source: 'Sibnet', headers: { 'Referer': url } };
+                }
+            } catch (e) {} return null;
+        },
+        async extractSendvid(url) {
+            try {
+                const res = await axios.get(url);
+                const match = res.data.match(/<source\s+src=["']([^"']+\.mp4)["']/i) || res.data.match(/video_source\s*=\s*["']([^"']+)["']/i);
+                if (match) return { url: match[1], quality: 'Auto', source: 'Sendvid' };
+            } catch (e) {} return null;
+        },
+        async extractStreamtape(url) {
+            try {
+                const res = await axios.get(url);
+                const match = res.data.match(/document\.getElementById\('robotlink'\)\.innerHTML\s*=\s*'\/\/([^']+)'\s*\+\s*'([^']+)'/i);
+                if (match) {
+                    const videoUrl = 'https://' + match[1] + match[2].substring(3);
+                    return { url: videoUrl, quality: 'Auto', source: 'Streamtape' };
+                }
+            } catch (e) {} return null;
+        },
+        async extractUqload(url) {
+            try {
+                const res = await axios.get(url);
+                const match = res.data.match(/sources:\s*\["([^"]+)"\]/i);
+                if (match) return { url: match[1], quality: 'Auto', source: 'Uqload' };
+            } catch (e) {} return null;
+        },
+        async resolveStream(url) {
+            let finalStream = null;
+            if (url.includes('vidoza.net')) finalStream = await this.extractVidoza(url);
+            else if (url.includes('sibnet.ru')) finalStream = await this.extractSibnet(url);
+            else if (url.includes('sendvid.com')) finalStream = await this.extractSendvid(url);
+            else if (url.includes('streamtape.com')) finalStream = await this.extractStreamtape(url);
+            else if (url.includes('uqload')) finalStream = await this.extractUqload(url);
+            
+            if (finalStream) {
+                return new StreamResult({
+                    url: finalStream.url, quality: finalStream.quality, source: finalStream.source,
+                    headers: finalStream.headers || {}
+                });
+            }
+            let host = 'Unknown'; try { host = new URL(url).hostname; } catch(e) {}
+            return new StreamResult({ url: url, quality: 'Auto', source: host });
+        }
+    };
 
     async function loadStreams(url, cb) {
         try {
@@ -171,11 +240,7 @@ const headers = {
                 let hostname = 'Lecteur';
                 try { hostname = new URL(src).hostname; } catch(e) {}
                 
-                streams.push(new StreamResult({
-                    url: src,
-                    quality: '1080p',
-                    source: hostname
-                }));
+                streams.push(await Extractors.resolveStream(src));
             }
 
             cb({ success: true, data: streams });

@@ -160,11 +160,11 @@ const headers = {
                         const epTitle = el.getAttribute('title') || el.textContent.trim();
                         const epUrl = el.getAttribute('href');
                         if (epUrl) {
-                            episodes.push({
-                                title: epTitle,
+                            episodes.push(new Episode({
+                                name: epTitle, episode: epTitle.match(/\d+/) ? parseInt(epTitle.match(/\d+/)[0], 10) : 0,
                                 url: epUrl.startsWith('http') ? epUrl : baseUrl + epUrl,
                                 season: 1
-                            });
+                            }));
                         }
                     });
                 }
@@ -172,12 +172,12 @@ const headers = {
 
             cb({
                 success: true,
-                data: {
+                data: new MultimediaItem({
                     title,
                     description,
                     posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
                     episodes
-                }
+                })
             });
         } catch (e) {
             console.error(e);
@@ -207,7 +207,23 @@ const headers = {
                     const nameMatch = html.match(nameRegex);
                     if (nameMatch) serverName = nameMatch[1].trim();
 
-                    streams.push(new StreamResult({ url: playerUrl, quality: serverName, headers: {'Referer': baseUrl , 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'} }));
+                    
+                    const streamRes = await Extractors.resolveStream(playerUrl);
+                    if (streamRes) {
+                        streamRes.quality = serverName;
+                        streams.push(streamRes);
+                    } else {
+                        
+                    const streamRes = await Extractors.resolveStream(playerUrl);
+                    if (streamRes) {
+                        streamRes.quality = serverName;
+                        streams.push(streamRes);
+                    } else {
+                        streams.push(new StreamResult({ url: playerUrl, quality: serverName, headers: {'Referer': baseUrl } }));
+                    }
+
+                    }
+
                 }
             }
 
