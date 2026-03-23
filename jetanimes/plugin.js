@@ -1,29 +1,25 @@
 (function () {
 
-    const axios = {
+        const axios = {
         get: async (url, config = {}) => {
             const h = config.headers || {};
             if (typeof http_get !== 'undefined') {
                 const r = await http_get(url, h);
-                
                 let parsed = r.body;
                 try { parsed = JSON.parse(r.body); } catch(e) {}
-                return { data: parsed };
-        
+                return { data: parsed, status: r.status };
             }
-            return { data: "" }; // Fallback
+            return { data: "" };
         },
         post: async (url, data, config = {}) => {
             const h = config.headers || {};
             if (typeof http_post !== 'undefined') {
                 const r = await http_post(url, h, data);
-                
                 let parsed = r.body;
                 try { parsed = JSON.parse(r.body); } catch(e) {}
-                return { data: parsed };
-        
+                return { data: parsed, status: r.status };
             }
-            return { data: "" }; // Fallback
+            return { data: "" };
         }
     };
 
@@ -34,7 +30,7 @@
      */
     async function getHome(cb) {
         try {
-            const response = await http_get(baseUrl);
+            const response = await axios.get(baseUrl);
             const html = response.data;
 
             const data = {};
@@ -124,7 +120,7 @@
      */
     async function search(query, cb) {
         try {
-            const homeRes = await http_get(baseUrl);
+            const homeRes = await axios.get(baseUrl);
             const homeHtml = homeRes.data;
             
             const nonceMatch = homeHtml.match(/"nonce":"([^"]+)"/);
@@ -132,7 +128,7 @@
             const nonce = nonceMatch[1];
             
             const searchUrl = `${baseUrl}/wp-json/dooplay/search/?keyword=${encodeURIComponent(query)}&nonce=${nonce}`;
-            const res = await http_get(searchUrl);
+            const res = await axios.get(searchUrl);
             const json = res.data;
             
             const results = [];
@@ -158,7 +154,7 @@
      */
     async function load(url, cb) {
         try {
-            const response = await http_get(url);
+            const response = await axios.get(url);
             const html = response.data;
 
             const title = (html.match(/<h1>([^<]+)<\/h1>/) || [])[1] || "Titre inconnu";
@@ -211,7 +207,7 @@
      */
     async function loadStreams(url, cb) {
         try {
-            const response = await http_get(url, { headers: { 'Referer': baseUrl , 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'} });
+            const response = await axios.get(url, { headers: { 'Referer': baseUrl , 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'} });
             const html = response.data;
 
             // Robust post ID extraction
@@ -229,7 +225,7 @@
                         // Manually construct form data string to avoid URLSearchParams issues
                         const params = "action=doo_player_ajax&post=" + postId + "&nume=" + nume + "&type=" + type;
                         
-                        const ajaxRes = await http_post(`${baseUrl}/wp-admin/admin-ajax.php`, params, {
+                        const ajaxRes = await axios.post(`${baseUrl}/wp-admin/admin-ajax.php`, params, {
                             headers: { 
                                 'Content-Type': 'application/x-www-form-urlencoded',
                                 'X-Requested-With': 'XMLHttpRequest',

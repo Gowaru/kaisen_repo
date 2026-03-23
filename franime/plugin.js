@@ -1,29 +1,25 @@
 (function() {
 
-    const axios = {
+        const axios = {
         get: async (url, config = {}) => {
             const h = config.headers || {};
             if (typeof http_get !== 'undefined') {
                 const r = await http_get(url, h);
-                
                 let parsed = r.body;
                 try { parsed = JSON.parse(r.body); } catch(e) {}
-                return { data: parsed };
-        
+                return { data: parsed, status: r.status };
             }
-            return { data: "" }; // Fallback
+            return { data: "" };
         },
         post: async (url, data, config = {}) => {
             const h = config.headers || {};
             if (typeof http_post !== 'undefined') {
                 const r = await http_post(url, h, data);
-                
                 let parsed = r.body;
                 try { parsed = JSON.parse(r.body); } catch(e) {}
-                return { data: parsed };
-        
+                return { data: parsed, status: r.status };
             }
-            return { data: "" }; // Fallback
+            return { data: "" };
         }
     };
 
@@ -39,7 +35,7 @@
 
     async function getHome(cb) {
         try {
-            const res = await http_get(apiBase, { headers });
+            const res = await axios.get(apiBase, { headers });
             const data = res.data;
             const items = data.slice(0, 30).map(anime => ({
                 title: (anime.title)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
@@ -58,7 +54,7 @@
 
     async function search(query, cb) {
         try {
-            const res = await http_get(apiBase, { headers });
+            const res = await axios.get(apiBase, { headers });
             const data = res.data;
             const items = data.filter(anime => 
                 anime.title.toLowerCase().includes(query.toLowerCase()) || 
@@ -84,7 +80,7 @@
             if (!idMatch) return cb({ success: false, message: "Invalid URL" });
             const id = parseInt(idMatch[1]);
 
-            const res = await http_get(apiBase, { headers });
+            const res = await axios.get(apiBase, { headers });
             const data = res.data;
             const anime = data.find(a => a.id === id);
 
@@ -124,7 +120,7 @@
             if (!match) return cb({ success: false, message: "Invalid Stream URL" });
             const [_, id, sIdx, eIdx] = match;
 
-            const res = await http_get(apiBase, { headers });
+            const res = await axios.get(apiBase, { headers });
             const data = res.data;
             const anime = data.find(a => a.id === parseInt(id));
             if (!anime) return cb({ success: false, message: "Anime not found" });

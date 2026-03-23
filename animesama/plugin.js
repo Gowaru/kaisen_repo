@@ -1,41 +1,37 @@
 (function() {
 
-    const axios = {
+        const axios = {
         get: async (url, config = {}) => {
             const h = config.headers || {};
             if (typeof http_get !== 'undefined') {
                 const r = await http_get(url, h);
-                
                 let parsed = r.body;
                 try { parsed = JSON.parse(r.body); } catch(e) {}
-                return { data: parsed };
-        
+                return { data: parsed, status: r.status };
             }
-            return { data: "" }; // Fallback
+            return { data: "" };
         },
         post: async (url, data, config = {}) => {
             const h = config.headers || {};
             if (typeof http_post !== 'undefined') {
                 const r = await http_post(url, h, data);
-                
                 let parsed = r.body;
                 try { parsed = JSON.parse(r.body); } catch(e) {}
-                return { data: parsed };
-        
+                return { data: parsed, status: r.status };
             }
-            return { data: "" }; // Fallback
+            return { data: "" };
         }
     };
 
     async function getHome(cb) {
         try {
             const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://anime-sama.to';
-            const response = await http_get(baseUrl);
+            const response = await axios.get(baseUrl);
             const html = response.data;
 
             const items = [];
-            // Catch a href="/catalogue/X/" and its img + h2
-            const regex = /<a[^>]+href="([^"]+\/catalogue\/[^"]+)"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"[\s\S]*?<h2[^>]*>([^<]+)<\/h2>/gi;
+            // Catch a href="/catalogue/X/" and its img alt
+            const regex = /<a[^>]+href="([^"]*\/catalogue\/[^"]+)"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"[\s\S]*?alt="([^"]+)"/gi;
             
             let match;
             let count = 0;
@@ -93,7 +89,7 @@
                  jsUrl = url + 'episodes.js';
             }
             
-            const response = await http_get(jsUrl);
+            const response = await axios.get(jsUrl);
             const jsData = response.data; // Raw JS text
 
             // Parse all var epsX = ['...']

@@ -1,15 +1,13 @@
 (function() {
 
-    const axios = {
+        const axios = {
         get: async (url, config = {}) => {
             const h = config.headers || {};
             if (typeof http_get !== 'undefined') {
                 const r = await http_get(url, h);
-                
                 let parsed = r.body;
                 try { parsed = JSON.parse(r.body); } catch(e) {}
-                return { data: parsed };
-        
+                return { data: parsed, status: r.status };
             }
             return { data: "" };
         },
@@ -17,11 +15,9 @@
             const h = config.headers || {};
             if (typeof http_post !== 'undefined') {
                 const r = await http_post(url, h, data);
-                
                 let parsed = r.body;
                 try { parsed = JSON.parse(r.body); } catch(e) {}
-                return { data: parsed };
-        
+                return { data: parsed, status: r.status };
             }
             return { data: "" };
         }
@@ -44,7 +40,7 @@
 
     async function getHome(cb) {
         try {
-            const res = await http_get(baseUrl, { headers });
+            const res = await axios.get(baseUrl, { headers });
             const html = res.data;
             const doc = await parseHtml(html);
             const results = {};
@@ -105,7 +101,7 @@
         try {
             const body = `do=search&subaction=search&story=${encodeURIComponent(query)}`;
 
-            const res = await http_post(baseUrl + '/index.php?do=search', body, {
+            const res = await axios.post(baseUrl + '/index.php?do=search', body, {
                 headers: {
                     ...headers,
                     'Content-Type': 'application/x-www-form-urlencoded'
@@ -140,7 +136,7 @@
 
     async function load(url, cb) {
         try {
-            const res = await http_get(url, { headers });
+            const res = await axios.get(url, { headers });
             const html = res.data;
             const doc = await parseHtml(html);
 
@@ -155,7 +151,7 @@
 
             const episodes = [];
             if (movieId) {
-                const epRes = await http_get(`${baseUrl}/engine/ajax/full-story.php?newsId=${movieId}&d=${Date.now()}`, { headers });
+                const epRes = await axios.get(`${baseUrl}/engine/ajax/full-story.php?newsId=${movieId}&d=${Date.now()}`, { headers });
                 if (epRes.data && epRes.data.status) {
                     const epDoc = await parseHtml(epRes.data.html);
                     queryAll(epDoc, '.ep-item').forEach((el) => {
@@ -189,7 +185,7 @@
 
     async function loadStreams(url, cb) {
         try {
-            const res = await http_get(url, { headers });
+            const res = await axios.get(url, { headers });
             const html = res.data;
             const streams = [];
 

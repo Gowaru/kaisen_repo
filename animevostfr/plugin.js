@@ -1,15 +1,13 @@
 (function() {
 
-    const axios = {
+        const axios = {
         get: async (url, config = {}) => {
             const h = config.headers || {};
             if (typeof http_get !== 'undefined') {
                 const r = await http_get(url, h);
-                
                 let parsed = r.body;
                 try { parsed = JSON.parse(r.body); } catch(e) {}
-                return { data: parsed };
-        
+                return { data: parsed, status: r.status };
             }
             return { data: "" };
         },
@@ -17,11 +15,9 @@
             const h = config.headers || {};
             if (typeof http_post !== 'undefined') {
                 const r = await http_post(url, h, data);
-                
                 let parsed = r.body;
                 try { parsed = JSON.parse(r.body); } catch(e) {}
-                return { data: parsed };
-        
+                return { data: parsed, status: r.status };
             }
             return { data: "" };
         }
@@ -46,20 +42,20 @@
     async function getHome(cb) {
         try {
             const url = manifest.baseUrl;
-            const res = await http_get(url, { headers });
+            const res = await axios.get(url, { headers });
             const doc = await parseHtml(res.data);
             const items = [];
 
-            // Targeted selectors for AnimeVOSTFR (Toroplay)
-            const entries = doc.querySelectorAll('.last_entries .item, .box .item');
+            // Targeted selectors for AnimeVOSTFR
+            const entries = doc.querySelectorAll('article.TPost');
             entries.forEach(entry => {
-                const titleEl = entry.querySelector('.title a, h3 a');
+                const titleEl = entry.querySelector('h3.Title, .Title');
                 const imgEl = entry.querySelector('img');
                 const linkEl = entry.querySelector('a');
 
                 if (titleEl && linkEl) {
                     items.push({
-                        title: titleEl.textContent.trim().toLowerCase(),
+                        title: titleEl.textContent.trim().replace('Anime', '').trim().toLowerCase(),
                         url: linkEl?.getAttribute('href'),
                         posterUrl: imgEl ? imgEl?.getAttribute('src') : '',
                         type: 'anime',
@@ -79,19 +75,19 @@
     async function search(query, cb) {
         try {
             const url = `${manifest.baseUrl}?s=${encodeURIComponent(query)}`;
-            const res = await http_get(url, { headers });
+            const res = await axios.get(url, { headers });
             const doc = await parseHtml(res.data);
             const items = [];
 
-            const entries = doc.querySelectorAll('.item, .box');
+            const entries = doc.querySelectorAll('article.TPost');
             entries.forEach(entry => {
-                const titleEl = entry.querySelector('.title a, h3 a');
+                const titleEl = entry.querySelector('h3.Title, .Title');
                 const imgEl = entry.querySelector('img');
                 const linkEl = entry.querySelector('a');
 
                 if (titleEl && linkEl) {
                     items.push({
-                        title: titleEl.textContent.trim().toLowerCase(),
+                        title: titleEl.textContent.trim().replace('Anime', '').trim().toLowerCase(),
                         url: linkEl?.getAttribute('href'),
                         posterUrl: imgEl ? imgEl?.getAttribute('src') : '',
                         type: 'anime',
@@ -110,7 +106,7 @@
 
     async function load(url, cb) {
         try {
-            const res = await http_get(url, { headers });
+            const res = await axios.get(url, { headers });
             const doc = await parseHtml(res.data);
 
             const title = doc.querySelector('.title')?.textContent.trim() || '';
@@ -148,7 +144,7 @@
 
     async function loadStreams(url, cb) {
         try {
-            const res = await http_get(url, { headers });
+            const res = await axios.get(url, { headers });
             const doc = await parseHtml(res.data);
             const streams = [];
 
