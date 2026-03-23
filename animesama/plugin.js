@@ -211,6 +211,7 @@ const axios = {
                 eps.push(new Episode({
                     name: "Épisode " + (i + 1),
                     episode: i + 1,
+                    posterUrl: posterUrl,
                     // We pack the streams into the URL field!
                     url: JSON.stringify(episodeStreams),
                     season: 1,
@@ -253,6 +254,8 @@ const axios = {
                 episodeStreams = [url];
             }
 
+            
+            
             const results = [];
             for (let i = 0; i < episodeStreams.length; i++) {
                 const streamUrl = episodeStreams[i];
@@ -274,10 +277,13 @@ const axios = {
                     });
                     if (extracted.headers) proxyStream.headers = extracted.headers;
                     results.push(proxyStream);
-                } else if(!streamUrl.includes('dood')) { // Dood doesn't work in iframes without extract
+                } else {
+                    // It's an unextracted iframe/HTML URL. We MUST NOT wrap it in MAGIC_PROXY_v1
+                    // because MAGIC_PROXY_v1 forces ExoPlayer byte-proxy, which cannot play HTML pages.
+                    // The SkyStream core app will handle the raw iframe URL with its Webview Interceptor.
                     results.push(new StreamResult({
-                        url: "MAGIC_PROXY_v1" + encodeBase64(streamUrl),
-                        source: sourceName + " (Plateforme Proxy)"
+                        url: streamUrl,
+                        source: sourceName
                     }));
                 }
             }
