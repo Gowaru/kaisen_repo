@@ -1,6 +1,8 @@
 (function () {
 
-        const axios = {
+        
+    const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://jetanimes.com';
+const axios = {
         get: async (url, config = {}) => {
             const h = config.headers || {};
             if (typeof http_get !== 'undefined') {
@@ -23,7 +25,7 @@
         }
     };
 
-    const baseUrl = manifest.baseUrl;
+    
 
     /**
      * Loads the home screen categories.
@@ -58,7 +60,7 @@
                 if (urlMatch && imgMatch) {
                     featured.push(new MultimediaItem({
                         url: urlMatch[1],
-                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(imgMatch[1]),
+                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(imgMatch[1]),
                         title: (clean(titleMatch ? titleMatch[1] : ""))?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
                         type: "anime"
                     }));
@@ -97,7 +99,7 @@
                         
                         items.push(new MultimediaItem({
                             url: urlMatch[1],
-                            posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(imgMatch[1]),
+                            posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(imgMatch[1]),
                             title: clean(finalTitle),
                             type: "anime"
                         }));
@@ -138,7 +140,7 @@
                     results.push(new MultimediaItem({
                         title: (item.title)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
                         url: item.url,
-                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(item.img),
+                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(item.img),
                         type: "anime"
                     }));
                 }

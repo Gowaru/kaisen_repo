@@ -23,7 +23,9 @@
         }
     };
 
-    const headers = {
+    
+    const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://animevostfr.org';
+const headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
         'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -41,7 +43,7 @@
 
     async function getHome(cb) {
         try {
-            const url = manifest.baseUrl;
+            const url = baseUrl;
             const res = await axios.get(url, { headers });
             const doc = await parseHtml(res.data);
             const items = [];
@@ -74,7 +76,7 @@
 
     async function search(query, cb) {
         try {
-            const url = `${manifest.baseUrl}?s=${encodeURIComponent(query)}`;
+            const url = `${baseUrl}?s=${encodeURIComponent(query)}`;
             const res = await axios.get(url, { headers });
             const doc = await parseHtml(res.data);
             const items = [];
@@ -109,18 +111,18 @@
             const res = await axios.get(url, { headers });
             const doc = await parseHtml(res.data);
 
-            const title = doc.querySelector('.title')?.textContent.trim() || '';
-            const description = doc.querySelector('.description')?.textContent.trim() || '';
-            const posterUrl = doc.querySelector('.poster img')?.src || '';
+            const title = doc.querySelector('h1.Title, .Title')?.textContent.trim() || '';
+            const description = doc.querySelector('.Description, .Synopsis, p')?.textContent.trim() || '';
+            const posterUrl = doc.querySelector('.Image figure img, .poster img')?.getAttribute('src') || '';
 
             const episodes = [];
-            const epLinks = doc.querySelectorAll('.ep-list-all a, .episodes a');
+            const epLinks = doc.querySelectorAll('.episode-link, .ep-list-all a, .episodes a');
             
             if (epLinks.length > 0) {
                 epLinks.forEach((link, idx) => {
                     episodes.push({
                         season: 1,
-                        name: link.textContent.trim() || `Épisode ${idx + 1}`,
+                        name: link.textContent.trim() || `Épisode ${epLinks.length - idx}`, // Correcting reversing order possibly
                         url: link?.getAttribute('href'),
                         playbackPolicy: 'none'
                     });
@@ -148,17 +150,33 @@
             const doc = await parseHtml(res.data);
             const streams = [];
 
-            const iframes = doc.querySelectorAll('iframe[src*="streamtape"], iframe[src*="vidoza"], iframe[src*="dood"], iframe[src*="embed"]');
-            iframes.forEach(iframe => {
+            const iframes = doc.querySelectorAll('iframe');
+            for (let iframe of iframes) {
                 let src = iframe?.getAttribute('src');
+                if (!src) continue;
                 if (src.startsWith('//')) src = 'https:' + src;
+                
+                // Resolve internal embeds like ?trembed=0...
+                if (src.includes('trembed') || src.includes('animevostfr.org')) {
+                    try {
+                        const embedRes = await axios.get(src, { headers: { ...headers, 'Referer': url } });
+                        const embedMatch = embedRes.data.match(/<iframe[^>]+src="([^"]+)"/i);
+                        if (embedMatch && embedMatch[1]) {
+                            src = embedMatch[1];
+                            if (src.startsWith('//')) src = 'https:' + src;
+                        }
+                    } catch (e) { console.error('Failed to resolve internal embed', e); }
+                }
+
+                let hostname = 'Lecteur';
+                try { hostname = new URL(src).hostname; } catch(e) {}
                 
                 streams.push(new StreamResult({
                     url: src,
                     quality: '1080p',
-                    source: new URL(src).hostname
+                    source: hostname
                 }));
-            });
+            }
 
             cb({ success: true, data: streams });
         } catch (e) {

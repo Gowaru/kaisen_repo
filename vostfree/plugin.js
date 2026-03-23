@@ -1,6 +1,8 @@
 (function() {
 
-        const axios = {
+        
+    const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://vostfree.ws';
+const axios = {
         get: async (url, config = {}) => {
             const h = config.headers || {};
             if (typeof http_get !== 'undefined') {
@@ -44,7 +46,7 @@
 
     async function getHome(cb) {
         try {
-            const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://vostfree.ws';
+            
             const { data: html } = await axios.get(baseUrl);
             
             const results = [];
@@ -102,7 +104,7 @@
 
     async function search(query, cb) {
         try {
-            const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://vostfree.ws';
+            
             
             const params = `do=search&subaction=search&story=${encodeURIComponent(query)}`;
             
@@ -187,7 +189,7 @@
             let posterUrl = "";
             const posterMatch = html.match(/<div[^>]*class="slide-poster"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"/i);
             if (posterMatch) {
-                posterUrl = posterMatch[1].startsWith('http') ? posterMatch[1] : manifest.baseUrl + posterMatch[1];
+                posterUrl = posterMatch[1].startsWith('http') ? posterMatch[1] : baseUrl + posterMatch[1];
             }
             
             // Extract Episodes
@@ -223,7 +225,7 @@
                 data: new MultimediaItem({
                     title: (title)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
                     url: url,
-                    posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl),
+                    posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl),
                     type: eps.length > 1 ? "series" : "movie",
                     episodes: eps
                 })

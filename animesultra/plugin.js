@@ -23,14 +23,16 @@
         }
     };
 
-    const baseUrl = manifest.baseUrl;
     
-    const headers = {
+    
+    
+    const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://animesultra.net';
+const headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
         'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Referer': manifest.baseUrl,
-        'Origin': manifest.baseUrl
+        'Referer': baseUrl,
+        'Origin': baseUrl
     };
 
     // Helper to use JSDOM like cheerio-ish (querySelectorAll)
@@ -58,7 +60,7 @@
                     trendingItems.push({
                         title,
                         url: url.startsWith('http') ? url : baseUrl + url,
-                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
+                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
                         type: 'anime', playbackPolicy: 'none'
                     });
                 }
@@ -81,7 +83,7 @@
                     latestItems.push({
                         title: (title + (ep ? ' - ' + ep : ''))?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
                         url: url.startsWith('http') ? url : baseUrl + url,
-                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
+                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
                         type: 'anime', playbackPolicy: 'none'
                     });
                 }
@@ -121,7 +123,7 @@
                     results.push({
                         title,
                         url: url.startsWith('http') ? url : baseUrl + url,
-                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
+                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
                         type: 'anime', playbackPolicy: 'none'
                     });
                 }
@@ -173,7 +175,7 @@
                 data: {
                     title,
                     description,
-                    posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return manifest.baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
+                    posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
                     episodes
                 }
             });

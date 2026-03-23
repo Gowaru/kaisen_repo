@@ -1,6 +1,8 @@
 (function() {
 
-        const axios = {
+        
+    const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://anime-sama.to';
+const axios = {
         get: async (url, config = {}) => {
             const h = config.headers || {};
             if (typeof http_get !== 'undefined') {
@@ -25,7 +27,7 @@
 
     async function getHome(cb) {
         try {
-            const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://anime-sama.to';
+            
             const response = await axios.get(baseUrl);
             const html = response.data;
 
@@ -44,12 +46,8 @@
                     else url = baseUrl + '/' + url;
                 }
                 
-                // Keep only main catalogue links (remove saison/vostfr suffixes from url for main item)
+                // No baseURL stripping, we need the exact season/lang link for episodes.js to work
                 let baseItemUrl = url;
-                const catalogueMatch = url.match(/(https?:\/\/[^\/]+\/catalogue\/[^\/]+\/)/);
-                if(catalogueMatch) {
-                    baseItemUrl = catalogueMatch[1];
-                }
 
                 if(!seenURLs.has(baseItemUrl)) {
                     seenURLs.add(baseItemUrl);
