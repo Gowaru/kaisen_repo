@@ -11,7 +11,7 @@
                 return { data: parsed };
         
             }
-            return { data: "" }; // Fallback
+            return { data: "" };
         },
         post: async (url, data, config = {}) => {
             const h = config.headers || {};
@@ -23,11 +23,11 @@
                 return { data: parsed };
         
             }
-            return { data: "" }; // Fallback
+            return { data: "" };
         }
     };
 
-    const baseUrl = 'https://ww.animesultra.org';
+    const baseUrl = manifest.baseUrl;
     const headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
@@ -44,7 +44,7 @@
             const res = await axios.get(baseUrl, { headers });
             const html = res.data;
             const doc = await parseHtml(html);
-            const results = [];
+            const results = {};
 
             // 1. Trending (Carousel)
             const trendingItems = [];
@@ -65,11 +65,7 @@
                 }
             });
             if (trendingItems.length > 0) {
-                results.push({
-                    title: 'Tendance',
-                    items: trendingItems,
-                    type: 'carousel'
-                });
+                results['Tendance'] = trendingItems;
             }
 
             // 2. Dernier épisode Ajouté (Grid)
@@ -92,18 +88,10 @@
                 }
             });
             if (latestItems.length > 0) {
-                results.push({
-                    title: 'Dernier épisode Ajouté',
-                    items: latestItems,
-                    type: 'grid'
-                });
+                results['Dernier épisode Ajouté'] = latestItems;
             }
 
-            const finalData = {};
-            results.forEach(r => {
-                finalData[r.title || 'Catégorie'] = r.items;
-            });
-            cb({ success: true, data: finalData });
+            cb({ success: true, data: results });
         } catch (e) {
             console.error(e);
             cb({ success: false, errorCode: "HOME_ERROR" });

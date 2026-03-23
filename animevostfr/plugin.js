@@ -11,7 +11,7 @@
                 return { data: parsed };
         
             }
-            return { data: "" }; // Fallback
+            return { data: "" };
         },
         post: async (url, data, config = {}) => {
             const h = config.headers || {};
@@ -23,7 +23,7 @@
                 return { data: parsed };
         
             }
-            return { data: "" }; // Fallback
+            return { data: "" };
         }
     };
 
@@ -60,8 +60,8 @@
                 if (titleEl && linkEl) {
                     items.push({
                         title: titleEl.textContent.trim().toLowerCase(),
-                        url: linkEl.href,
-                        posterUrl: imgEl ? imgEl.src : '',
+                        url: linkEl?.getAttribute('href'),
+                        posterUrl: imgEl ? imgEl?.getAttribute('src') : '',
                         type: 'anime',
                         status: 'ongoing',
                         playbackPolicy: 'none'
@@ -92,8 +92,8 @@
                 if (titleEl && linkEl) {
                     items.push({
                         title: titleEl.textContent.trim().toLowerCase(),
-                        url: linkEl.href,
-                        posterUrl: imgEl ? imgEl.src : '',
+                        url: linkEl?.getAttribute('href'),
+                        posterUrl: imgEl ? imgEl?.getAttribute('src') : '',
                         type: 'anime',
                         status: 'ongoing',
                         playbackPolicy: 'none'
@@ -125,7 +125,7 @@
                     episodes.push({
                         season: 1,
                         name: link.textContent.trim() || `Épisode ${idx + 1}`,
-                        url: link.href,
+                        url: link?.getAttribute('href'),
                         playbackPolicy: 'none'
                     });
                 });
@@ -154,7 +154,7 @@
 
             const iframes = doc.querySelectorAll('iframe[src*="streamtape"], iframe[src*="vidoza"], iframe[src*="dood"], iframe[src*="embed"]');
             iframes.forEach(iframe => {
-                let src = iframe.src;
+                let src = iframe?.getAttribute('src');
                 if (src.startsWith('//')) src = 'https:' + src;
                 
                 streams.push(new StreamResult({

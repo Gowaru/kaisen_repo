@@ -27,7 +27,7 @@
         }
     };
 
-    const baseUrl = 'https://sekai.one';
+    const baseUrl = manifest.baseUrl;
     const headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
@@ -41,22 +41,48 @@
             const doc = await parseHtml(html);
             const items = [];
 
-            const links = Array.from(doc.querySelectorAll('a[href]'));
-            links.forEach(link => {
+            const slides = Array.from(doc.querySelectorAll('.swiper-slide'));
+            slides.forEach(slide => {
+                const link = slide.querySelector('a');
+                if (!link) return;
                 const href = link.getAttribute('href');
-                const title = link.getAttribute('title') || link.textContent.trim();
-                const img = link.querySelector('img');
-                const posterUrl = img?.getAttribute('src') || img?.getAttribute('data-src');
+                const titleEl = slide.querySelector('.series-name');
+                const title = titleEl ? titleEl.textContent.trim() : (link.getAttribute('title') || link.textContent.trim());
+                const imgEl = slide.querySelector('img');
+                const posterUrl = imgEl ? (imgEl.getAttribute('src') || imgEl.getAttribute('data-src')) : '';
 
                 if (href && !href.startsWith('http') && !href.startsWith('/') && href !== 'android' && href !== 'contact') {
                     items.push(new MultimediaItem({
                         title: title || href.split('?')[0].replace(/-/g, ' '),
                         url: baseUrl + '/' + href,
                         posterUrl: posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : '',
-                        type: 'anime'
+                        type: 'anime',
+                        playbackPolicy: 'none'
                     }));
                 }
             });
+
+            // Also scrape from the embedded autocomplete array for missing items
+            const regex = /{ *label:s*"([^"]+)",s*image:s*"([^"]+)",s*url:s*"([^"]+)"/g;
+            let match;
+            while ((match = regex.exec(html)) !== null) {
+                const title = match[1];
+                let posterUrl = match[2];
+                let href = match[3];
+                // simple duplicate check based on url
+                let fullUrl = baseUrl + '/' + href;
+                if (!items.find(i => i.url === fullUrl)) {
+                    if (href && !href.startsWith('http') && !href.startsWith('/') && href !== 'android' && href !== 'contact') {
+                        items.push(new MultimediaItem({
+                            title: title,
+                            url: fullUrl,
+                            posterUrl: posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : '',
+                            type: 'anime',
+                            playbackPolicy: 'none'
+                        }));
+                    }
+                }
+            }
 
             cb({
                 success: true,
@@ -77,25 +103,54 @@
             const doc = await parseHtml(html);
             const items = [];
 
-            const links = Array.from(doc.querySelectorAll('a[href]'));
-            links.forEach(link => {
+                        // Fetch from swiper-slides to get covers properly
+            const slides = Array.from(doc.querySelectorAll('.swiper-slide'));
+            slides.forEach(slide => {
+                const link = slide.querySelector('a');
+                if (!link) return;
                 const href = link.getAttribute('href');
-                const title = link.getAttribute('title') || link.textContent.trim();
+                const titleEl = slide.querySelector('.series-name');
+                const title = titleEl ? titleEl.textContent.trim() : (link.getAttribute('title') || link.textContent.trim());
                 const cleanTitle = title || href.split('?')[0].replace(/-/g, ' ');
+                const imgEl = slide.querySelector('img');
+                const posterUrl = imgEl ? (imgEl.getAttribute('src') || imgEl.getAttribute('data-src')) : '';
 
                 if (href && !href.startsWith('http') && !href.startsWith('/') && href !== 'android' && href !== 'contact') {
                     if (cleanTitle.toLowerCase().includes(query.toLowerCase())) {
-                        const img = link.querySelector('img');
-                        const posterUrl = img?.getAttribute('src') || img?.getAttribute('data-src');
                         items.push(new MultimediaItem({
-                            title: cleanTitle,
-                            url: baseUrl + '/' + href,
-                            posterUrl: posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : '',
-                            type: 'anime'
+                             title: cleanTitle,
+                             url: baseUrl + '/' + href,
+                             posterUrl: posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : '',
+                             type: 'anime',
+                             playbackPolicy: 'none'
                         }));
                     }
                 }
             });
+
+            // Also scrape from the embedded autocomplete array for missing items
+            const regex = /{ *label:s*"([^"]+)",s*image:s*"([^"]+)",s*url:s*"([^"]+)"/g;
+            let match;
+            while ((match = regex.exec(html)) !== null) {
+                const title = match[1];
+                let posterUrl = match[2];
+                let href = match[3];
+                // simple duplicate check based on url
+                let fullUrl = baseUrl + '/' + href;
+                if (!items.find(i => i.url === fullUrl)) {
+                    if (href && !href.startsWith('http') && !href.startsWith('/') && href !== 'android' && href !== 'contact') {
+                        if (title.toLowerCase().includes(query.toLowerCase())) {
+                             items.push(new MultimediaItem({
+                                 title: title,
+                                 url: fullUrl,
+                                 posterUrl: posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : '',
+                                 type: 'anime',
+                                 playbackPolicy: 'none'
+                             }));
+                        }
+                    }
+                }
+            }
 
             cb({ success: true, data: items });
         } catch (e) {
