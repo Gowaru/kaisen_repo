@@ -119,9 +119,11 @@ const headers = {
             
             if (epLinks.length > 0) {
                 epLinks.forEach((link, idx) => {
+                    const epName = link.textContent.trim() || `Épisode ${idx + 1}`;
                     episodes.push({
                         season: 1,
-                        name: link.textContent.trim() || `Épisode ${idx + 1}`,
+                        episode: parseInt(epName.match(/\d+/) ? epName.match(/\d+/)[0] : 0, 10),
+                        name: epName,
                         url: link?.getAttribute('href'),
                         playbackPolicy: 'none'
                     });
@@ -131,6 +133,7 @@ const headers = {
                 if (epNumMatch) {
                     episodes.push({
                         season: 1,
+                        episode: parseInt(epNumMatch[1], 10),
                         name: `Épisode ${epNumMatch[1]}`,
                         url: url,
                         playbackPolicy: 'none'

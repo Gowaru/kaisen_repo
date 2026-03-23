@@ -205,6 +205,7 @@ const axios = {
                 while ((optMatch = optionsRegex.exec(selectMatch[1])) !== null) {
                     eps.push(new Episode({
                         name: optMatch[2].trim(),
+                        episode: parseInt(optMatch[2].trim().match(/\d+/) ? optMatch[2].trim().match(/\d+/)[0] : 0, 10),
                         url: `${url}#${optMatch[1]}`,
                         season: 1,
                         dubStatus: url.includes('-vf-') ? 'dub' : 'sub'
@@ -214,6 +215,7 @@ const axios = {
                 // If it's a movie and there are no episodes, just add one generic episode
                 eps.push(new Episode({
                     name: "Film / Unique",
+                    episode: 1,
                     url: `${url}#movie`,
                     season: 1,
                     dubStatus: url.includes('-vf-') ? 'dub' : 'sub'

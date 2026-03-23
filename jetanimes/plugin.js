@@ -177,6 +177,7 @@ const axios = {
                 while ((epMatch = episodeRegex.exec(blockHtml)) !== null) {
                     episodes.push(new Episode({
                         name: epMatch[5].trim(),
+                        episode: parseInt(epMatch[5].trim().match(/\d+/) ? epMatch[5].trim().match(/\d+/)[0] : 0, 10),
                         url: epMatch[4],
                         posterUrl: epMatch[1],
                         season: seasonNum || 1
@@ -185,7 +186,7 @@ const axios = {
             }
 
             if (episodes.length === 0) {
-                episodes.push(new Episode({ name: "Film / Episode", url, season: 1 }));
+                episodes.push(new Episode({ name: "Film / Episode", episode: 1, url, season: 1 }));
             }
 
             cb({

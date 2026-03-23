@@ -123,6 +123,7 @@ const axios = {
 
                 eps.push(new Episode({
                     name: "Épisode " + (i + 1),
+                    episode: i + 1,
                     // We pack the streams into the URL field!
                     url: JSON.stringify(episodeStreams),
                     season: 1,

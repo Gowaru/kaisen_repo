@@ -177,6 +177,7 @@ const headers = {
             for (let i = 1; i <= epCount; i++) {
                 episodes.push(new Episode({
                     name: `Épisode ${i}`,
+                    episode: i,
                     url: url + (url.includes('?') ? '&' : '?') + `ep=${i}`,
                     season: 1
                 }));

@@ -182,6 +182,7 @@ const axios = {
                 
                 eps.push(new Episode({
                     name: epName,
+                    episode: parseInt(epName.match(/\d+/) ? epName.match(/\d+/)[0] : 0, 10),
                     url: JSON.stringify(formattedUrls),
                     season: 1,
                     dubStatus: url.includes('-vf-') || url.includes('-vf.') ? 'dub' : 'sub'
@@ -191,6 +192,7 @@ const axios = {
             if (eps.length === 0) {
                 eps.push(new Episode({
                     name: "Film / Unique",
+                    episode: 1,
                     url: JSON.stringify([]),
                     season: 1,
                     dubStatus: url.includes('-vf-') || url.includes('-vf.') ? 'dub' : 'sub'
