@@ -228,7 +228,7 @@
                      } 
                  });
                  const html = response.data;
-                 const regex = /<a href="([^"]+)" class="asn-search-result"><img[^>]+src="([^"]+)"[^>]*><div[^>]*><h3[^>]*>([^<]+)<\/h3>/gi;
+                 const regex = /<a href="([^"]+)" class="asn-search-result"><img[^>]+src="([^"]+)"[^>]*><div[^>]*><h3[^>]*>([^<]+)<\/h3>(?:[^<]*<p[^>]*>([^<]+)<\/p>)?/gi;
                  let match;
                  while((match = regex.exec(html)) !== null && results.length < 25) {
                      if (match[1].includes('/scan/')) continue;
@@ -239,8 +239,13 @@
                      let posterUrl = match[2];
                      if (!posterUrl.startsWith('http')) posterUrl = baseUrl + posterUrl;
                      
+                     let title = match[3].trim();
+                     if (match[4] && match[4].trim()) {
+                         title += " (" + match[4].trim().replace(/&#039;/g, "'").replace(/&amp;/g, "&") + ")";
+                     }
+
                      results.push(new MultimediaItem({
-                          title: match[3].trim(),
+                          title: title,
                           url: itemUrl,
                           posterUrl: posterUrl,
                           type: "anime"
@@ -359,7 +364,27 @@
                                 }
                             }
                             
-                            let epName = sEntry.title.toLowerCase().includes('film') ? "Film " + (i + 1) : "Épisode " + (i + 1);
+                            let epName = "";
+                            const sTitle = sEntry.title.trim();
+                            const isFilmOrOav = /film|films|oav|special|spécial/i.test(sTitle);
+                            
+                            if (/^saison \d+$/i.test(sTitle)) {
+                                epName = "Épisode " + (i + 1);
+                            } else if (isFilmOrOav && epCount === 1) {
+                                let tName = "Film";
+                                if(/oav/i.test(sTitle)) tName = "OAV";
+                                else if(/special|spécial/i.test(sTitle)) tName = "Spécial";
+                                epName = tName;
+                            } else if (isFilmOrOav) {
+                                let tName = "Film";
+                                if(/oav/i.test(sTitle)) tName = "OAV";
+                                else if(/special|spécial/i.test(sTitle)) tName = "Spécial";
+                                epName = tName + " " + (i + 1);
+                            } else if (epCount === 1) {
+                                epName = sTitle;
+                            } else {
+                                epName = sTitle + " - Ép. " + (i + 1);
+                            }
 
                             eps.push(new Episode({
                                 name: epName,
