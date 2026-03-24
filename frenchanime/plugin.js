@@ -246,7 +246,8 @@
         },
         async extractUqload(url) {
             try {
-                const res = await axios.get(url, { headers: { 'Referer': 'https://uqload.com' } });
+                const finalUrl = url.replace('uqload.bz', 'uqload.com'); 
+                const res = await axios.get(finalUrl, { headers: { 'Referer': 'https://uqload.com' } });
                 const match = res.data.match(/sources:\s*\["([^"]+)"\]/i);
                 if (match) return { url: match[1], quality: 'Auto', source: 'Uqload' };
             } catch (e) {} return null;
@@ -277,7 +278,7 @@
                 });
             }
             
-            return null;
+            return null; // Return null so it falls back to the original URL
         }
     };
 
@@ -300,7 +301,7 @@
                         else if(streamUrl.includes('sendvid')) sourceName = "Sendvid";
                         else if(streamUrl.includes('vudeo')) sourceName = "Vudeo";
                         
-                        streams.push(new StreamResult({ url: streamUrl, source: sourceName, quality: 'Auto' }));
+                        streams.push(new StreamResult({ url: streamUrl, source: sourceName, quality: 'Auto', type: "WebView" }));
                     }
                 } catch(e) {
                     // ignore failure and continue
