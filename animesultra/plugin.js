@@ -201,6 +201,7 @@
 
             const episodes = [];
             let debugInfo = [];
+            let matchCount = 0;
             if (movieId) {
                 
                 debugInfo.push('MID='+movieId);
@@ -230,7 +231,7 @@
                 htmlFrag = htmlFrag.replace(/\\"/g, '"').replace(/\\'/g, "'").replace(/\\\//g, '/');
                 
                 debugInfo.push('HLEN='+(htmlFrag?htmlFrag.length:0));
-                let matchCount=0;
+                
                 if (htmlFrag) {
                     const epRegex = /<a [^>]*class=["'][^"']*ep-item[^"']*["'][^>]*>/gi;
                     let match;
@@ -326,20 +327,12 @@
                     if (nameMatch) serverName = nameMatch[1].trim();
 
                     
-                    const streamRes = await Extractors.resolveStream(playerUrl);
-                    if (streamRes) {
-                        streamRes.quality = serverName;
-                        streams.push(streamRes);
-                    } else {
-                        
-                    const streamRes = await Extractors.resolveStream(playerUrl);
+                    const streamRes = await (typeof Extractors !== 'undefined' ? Extractors.resolveStream(playerUrl) : null);
                     if (streamRes) {
                         streamRes.quality = serverName;
                         streams.push(streamRes);
                     } else {
                         streams.push(new StreamResult({ url: playerUrl, quality: serverName, headers: {'Referer': baseUrl } }));
-                    }
-
                     }
 
                 }
