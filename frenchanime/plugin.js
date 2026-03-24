@@ -301,7 +301,7 @@
                         else if(streamUrl.includes('sendvid')) sourceName = "Sendvid";
                         else if(streamUrl.includes('vudeo')) sourceName = "Vudeo";
                         
-                        streams.push(new StreamResult({ url: streamUrl, source: sourceName, quality: 'Auto', type: "WebView" }));
+                        streams.push(new StreamResult({ url: streamUrl, source: sourceName, quality: 'Auto' }));
                     }
                 } catch(e) {
                     // ignore failure and continue
