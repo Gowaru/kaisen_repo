@@ -201,31 +201,48 @@
 
             const episodes = [];
             if (movieId) {
-                const epRes = await axios.get(`${baseUrl}/engine/ajax/full-story.php?newsId=${movieId}&d=${Date.now()}`, { headers });
-                if (epRes.data && epRes.data.status) {
-                    const epDoc = await parseHtml(epRes.data.html);
-                    queryAll(epDoc, '.ep-item').forEach((el) => {
-                        const dataNum = el.getAttribute('data-number');
-                        const innerTitle = el.querySelector ? el.querySelector('.ep-name')?.textContent.trim() : null;
-                        const epTitle = innerTitle || el.getAttribute('title') || el.textContent.trim();
-                        const epUrl = el.getAttribute('href');
-                        if (epUrl) {
-                            let epNum = 0;
-                            if (dataNum) {
-                                epNum = parseInt(dataNum, 10);
-                            } else if (epTitle && epTitle.match(/\\d+/)) {
-                                epNum = parseInt(epTitle.match(/\\d+/)[0], 10);
-                            }
-                            if (isNaN(epNum)) epNum = 0;
+                
+                let parsedBase = baseUrl;
+                try {
+                    const match = url.split('/').slice(0, 3).join('/');
+                    if (match) parsedBase = match;
+                } catch(e) {}
+                const epRes = await axios.get(`${parsedBase}/engine/ajax/full-story.php?newsId=${movieId}&d=${Date.now()}`, { headers });
+                
+                let htmlFrag = '';
+                if (typeof epRes.data === 'string') {
+                    try {
+                        let parsed = JSON.parse(epRes.data);
+                        htmlFrag = parsed.html || '';
+                    } catch(e) {
+                        htmlFrag = epRes.data;
+                    }
+                } else if (epRes.data && epRes.data.html) {
+                    htmlFrag = epRes.data.html;
+                }
+                
+                if (htmlFrag) {
+                    const epRegex = /<a [^>]*class=["'][^"']*ep-item[^"']*["'][^>]*>/gi;
+                    let match;
+                    while ((match = epRegex.exec(htmlFrag)) !== null) {
+                        const aTag = match[0];
+                        const epUrlMatch = aTag.match(/href=["']([^"']+)["']/);
+                        const numMatch = aTag.match(/data-number=["'](\d+)["']/);
+                        const titleMatch = aTag.match(/title=["']([^"']+)["']/);
+                        
+                        const epUrl = epUrlMatch ? epUrlMatch[1] : null;
+                        let epNum = numMatch ? parseInt(numMatch[1], 10) : 0;
+                        const epTitle = titleMatch ? titleMatch[1] : null;
 
+                        if (epUrl) {
                             episodes.push(new Episode({
-                                name: epTitle, 
+                                name: epTitle || ('Episode ' + epNum), 
                                 episode: epNum,
                                 url: epUrl.startsWith('http') ? epUrl : baseUrl + epUrl,
                                 season: 1
                             }));
                         }
-                    });
+                    }
                 }
             }
 
