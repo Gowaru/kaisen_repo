@@ -240,11 +240,16 @@
                         const epTitle = titleMatch ? titleMatch[1] : null;
 
                         if (epUrl) {
+                            let epPoster = undefined;
+                            if (posterUrl) {
+                                epPoster = posterUrl.startsWith('http') ? posterUrl : (posterUrl.startsWith('/') ? baseUrl + posterUrl : baseUrl + '/' + posterUrl);
+                            }
                             episodes.push(new Episode({
                                 name: epTitle || ('Episode ' + epNum), 
                                 episode: epNum,
                                 url: epUrl.startsWith('http') ? epUrl : baseUrl + epUrl,
-                                season: 1
+                                season: 1,
+                                posterUrl: epPoster
                             }));
                         }
                     }
@@ -300,18 +305,60 @@
     async function loadStreams(url, cb) {
         try {
             const res = await axios.get(url, { headers });
-            const html = res.data;
+            let html = res.data;
             const streams = [];
+
+            let movieId = url.match(/\/(\d+)-/)?.[1];
+            if (!movieId) {
+                let matchRegex = html.match(/data-id=["'](\d+)["']/);
+                movieId = matchRegex ? matchRegex[1] : null;
+            }
+
+            let fullStoryHtml = html;
+            if (!html.includes('content_player_') && movieId) {
+                let parsedBase = baseUrl;
+                try {
+                    const matchUrl = url.split('/').slice(0, 3).join('/');
+                    if (matchUrl) parsedBase = matchUrl;
+                } catch(e) {}
+                const fsRes = await axios.get(`${parsedBase}/engine/ajax/full-story.php?newsId=${movieId}&d=${Date.now()}`, { headers });
+                let rawBody = typeof fsRes.data === 'string' ? fsRes.data : '';
+                try {
+                    if (typeof fsRes.data === 'object' && fsRes.data) {
+                        fullStoryHtml = fsRes.data.html || JSON.stringify(fsRes.data);
+                    } else if (rawBody) {
+                        let parsed = JSON.parse(rawBody);
+                        fullStoryHtml = parsed.html || rawBody;
+                    }
+                } catch(e) {
+                    fullStoryHtml = rawBody;
+                }
+                if(typeof fullStoryHtml !== 'string') {
+                    try { fullStoryHtml = JSON.stringify(fullStoryHtml); } catch(e) { fullStoryHtml = String(fullStoryHtml); }
+                }
+                fullStoryHtml = fullStoryHtml.replace(/\\"/g, '"').replace(/\\'/g, "'").replace(/\\\//g, '/');
+            }
 
             const serverRegex = /<div class="item server-item" data-class="([^"]*)" data-type="([^"]*)" data-id="([^"]*)" data-server-id="([^"]*)" data-embed="([^"]*)">/g;
             let match;
             while ((match = serverRegex.exec(html)) !== null) {
+                const serverClass = match[1] || '';
                 const serverId = match[4];
                 const embedUrl = match[5];
                 
-                const contentPlayerRegex = new RegExp(`id="content_player_${serverId}">([^<]*)<`, 'i');
-                const cpMatch = html.match(contentPlayerRegex);
+                const contentPlayerRegex = new RegExp(`id="content_player_${serverId}"[^>]*>([^<]*)<`, 'i');
+                const cpMatch = fullStoryHtml.match(contentPlayerRegex);
                 let playerUrl = cpMatch ? cpMatch[1].trim() : embedUrl;
+
+                if (!playerUrl.startsWith('http')) {
+                    if (serverClass.includes('sibnet')) playerUrl = 'https://video.sibnet.ru/shell.php?videoid=' + playerUrl;
+                    else if (serverClass.includes('mystream')) playerUrl = 'https://embed.mystream.to/' + playerUrl;
+                    else if (serverClass.includes('streamtape')) playerUrl = 'https://streamtape.com/e/' + playerUrl;
+                    else if (serverClass.includes('uqload')) playerUrl = 'https://uqload.com/embed-' + playerUrl + '.html';
+                    else if (serverClass.includes('cdnt2')) playerUrl = 'https://mb.toonanime.xyz/dist/mpia.html?id=' + playerUrl;
+                }
+                
+                if (playerUrl && playerUrl.includes('GQP45MG1WJ93')) continue; // Skip fake fallback url
 
                 if (playerUrl) {
                     let serverName = 'Server ' + serverId;
