@@ -230,10 +230,10 @@
                 htmlFrag = htmlFrag.replace(/\\"/g, '"').replace(/\\'/g, "'").replace(/\\\//g, '/');
                 
                 debugInfo.push('HLEN='+(htmlFrag?htmlFrag.length:0));
+                let matchCount=0;
                 if (htmlFrag) {
                     const epRegex = /<a [^>]*class=["'][^"']*ep-item[^"']*["'][^>]*>/gi;
                     let match;
-                    let matchCount=0;
                     while ((match = epRegex.exec(htmlFrag)) !== null) {
                         matchCount++;
                         const aTag = match[0];
