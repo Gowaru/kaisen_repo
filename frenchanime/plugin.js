@@ -147,8 +147,16 @@
             else if (posterUrl && !posterUrl.startsWith('http')) posterUrl = baseUrl.replace(/\/$/, '') + (posterUrl.startsWith('/') ? '' : '/') + posterUrl;
             
             let description = "";
-            const descNode = doc.querySelector('.mov-desc:not(.mov-label), .fdesc, [itemprop="description"]');
-            if (descNode) description = descNode.textContent.replace(/wiflix/gi, '').trim();
+            let descNode = doc.querySelector('[itemprop="description"], .fdesc');
+            if (descNode) {
+                description = descNode.textContent.replace(/wiflix/gi, '').trim();
+            } else {
+                const descNodes = Array.from(doc.querySelectorAll('.mov-desc:not(.mov-label)'));
+                if(descNodes.length > 0) {
+                    const longest = descNodes.reduce((a, b) => a.textContent.length > b.textContent.length ? a : b);
+                    description = longest.textContent.replace(/wiflix/gi, '').trim();
+                }
+            }
 
             let year = "";
             let originalTitle = "";
@@ -169,7 +177,7 @@
             }
 
             const eps = [];
-            const lineRegex = /(?:^|\n)\s*([0-9A-Za-z -]+)!\s*([^<\n]+)/gi;
+            const lineRegex = /(?:^|>|\n)\s*([0-9A-Za-z -]+)!\s*([^<\n\r]+)/gi;
             let lineMatch;
             const added = new Set();
             
@@ -186,6 +194,7 @@
                 eps.push(new Episode({
                     name: epName,
                     episode: parseInt(epName.match(/\d+/) ? epName.match(/\d+/)[0] : 0, 10) || 1,
+                    posterUrl: posterUrl,
                     url: JSON.stringify(formattedUrls),
                     season: 1,
                     dubStatus: url.includes('-vf-') || url.includes('-vf.') ? 'dub' : 'sub'
@@ -193,7 +202,7 @@
             }
             
             if (eps.length === 0) {
-                eps.push(new Episode({ name: "Film / Unique", episode: 1, url: "[]", season: 1, dubStatus: url.includes('-vf-') || url.includes('-vf.') ? 'dub' : 'sub' }));
+                eps.push(new Episode({ name: "Film / Unique", episode: 1, posterUrl: posterUrl, url: "[]", season: 1, dubStatus: url.includes('-vf-') || url.includes('-vf.') ? 'dub' : 'sub' }));
             }
 
             cb({ 
