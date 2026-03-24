@@ -39,7 +39,10 @@
                 let title = img.getAttribute('alt') || item.querySelector('.mov-t, .mov-title')?.textContent || "Anime";
                 title = title.replace(/wiflix/gi, '').trim();
                 let posterUrl = img.getAttribute('data-src') || img.getAttribute('src') || '';
-                if (posterUrl && !posterUrl.startsWith('http')) posterUrl = baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl;
+                posterUrl = posterUrl.trim();
+                let protocolMatch = posterUrl.match(/^(\/\/[^\/]+)/);
+                if (protocolMatch) posterUrl = "https:" + posterUrl;
+                else if (posterUrl && !posterUrl.startsWith('http')) posterUrl = baseUrl.replace(/\/$/, '') + (posterUrl.startsWith('/') ? '' : '/') + posterUrl;
                 return new MultimediaItem({ title, url: url.startsWith('http') ? url : baseUrl+url, posterUrl, type: "anime" });
             }
 
@@ -110,7 +113,10 @@
                     
                     const imgEl = el.querySelector('img');
                     let poster = imgEl ? (imgEl.getAttribute('data-src') || imgEl.getAttribute('src')) : '';
-                    if (poster && !poster.startsWith('http')) poster = baseUrl + (poster.startsWith('/') ? '' : '/') + poster;
+                    poster = (poster || '').trim();
+                    let protocolMatch = poster.match(/^(\/\/[^\/]+)/);
+                    if (protocolMatch) poster = "https:" + poster;
+                    else if (poster && !poster.startsWith('http')) poster = baseUrl.replace(/\/$/, '') + (poster.startsWith('/') ? '' : '/') + poster;
 
                     results.push(new MultimediaItem({
                         title, url: url.startsWith('http') ? url : baseUrl + url, posterUrl: poster, type: "anime"
@@ -134,9 +140,11 @@
             if(titleMatch) title = titleMatch[1].split(' en ')[0].replace(/wiflix/gi, '').replace(' VOSTFR', '').replace(' VF', '').trim();
 
             let posterUrl = "";
-            const imgMatch = doc.querySelector('.slide-poster img');
+            const imgMatch = doc.querySelector('.slide-poster img, .mov-i img, img#posterimg, img[itemprop="image"], img[itemprop="thumbnailUrl"]');
             if (imgMatch) posterUrl = imgMatch.getAttribute('data-src') || imgMatch.getAttribute('src');
-            if (posterUrl && !posterUrl.startsWith('http')) posterUrl = baseUrl + posterUrl;
+            posterUrl = (posterUrl || "").trim();
+            if (posterUrl.startsWith('//')) posterUrl = "https:" + posterUrl;
+            else if (posterUrl && !posterUrl.startsWith('http')) posterUrl = baseUrl.replace(/\/$/, '') + (posterUrl.startsWith('/') ? '' : '/') + posterUrl;
             
             let description = "";
             const descNode = doc.querySelector('.mov-desc:not(.mov-label), .fdesc, [itemprop="description"]');
