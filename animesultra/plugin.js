@@ -180,6 +180,25 @@
                 movieId = doc.querySelector('.film-poster-ahref')?.getAttribute('data-id') || doc.querySelector('[data-id]')?.getAttribute('data-id');
             }
 
+            const statusMatch = html.match(/<span class="item-head">[\s\S]*?Status:<\/span>\s*<span class="name">\s*([^<]*?)\s*<\/span>/i) || html.match(/Statut:<\/span>\s*<span class="name">\s*([^<]*?)\s*<\/span>/i);
+            const status = statusMatch ? statusMatch[1].trim() : null;
+
+            const yearMatch = html.match(/<span class="item-head">Année:<\/span>\s*<span class="name">[\s\S]*?>(\d{4})<\/a>/i);
+            let year = yearMatch ? parseInt(yearMatch[1], 10) : null;
+            if (isNaN(year)) year = null;
+
+            const durationMatch = html.match(/<span class="item-head">Durée:<\/span>\s*<span class="name">([^<]*)<\/span>/i);
+            const durationStr = durationMatch ? durationMatch[1].trim() : null;
+
+            let duration = null;
+            if (durationStr) {
+                const minMatch = durationStr.match(/(\d+)\s*min/);
+                if (minMatch) {
+                    duration = parseInt(minMatch[1], 10);
+                }
+            }
+            if (isNaN(duration)) duration = null;
+
             const episodes = [];
             if (movieId) {
                 const epRes = await axios.get(`${baseUrl}/engine/ajax/full-story.php?newsId=${movieId}&d=${Date.now()}`, { headers });
@@ -242,6 +261,9 @@
                     title,
                     description,
                     posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
+                    year,
+                    duration,
+                    status,
                     episodes,
                     recommendations
                 })
