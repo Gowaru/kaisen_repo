@@ -124,7 +124,7 @@
             let match;
             const seenURLs = new Set();
             while ((match = regex.exec(block)) !== null) {
-                if(match[1] && match[1].toLowerCase() === 'scan') continue; // Skip scans
+                if(match[1] && match[1].toLowerCase() === 'scan') continue;
                 
                 let lang = match[2] ? match[2] : '';
                 let url = match[3];
@@ -216,20 +216,66 @@
 
     async function search(query, cb) {
         try {
-             const response = await axios.post(baseUrl + '/template-php/defaut/fetch.php', 'query=' + encodeURIComponent(query), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
-             const html = response.data;
-             const results = [];
-             const regex = /<a href="([^"]+)" class="asn-search-result"><img[^>]+src="([^"]+)"[^>]*><div[^>]*><h3[^>]*>([^<]+)<\/h3>/gi;
-             let match;
-             while((match = regex.exec(html)) !== null && results.length < 25) {
-                 if (match[1].includes('/scan/')) continue;
-                 results.push(new MultimediaItem({
-                      title: match[3].trim(),
-                      url: match[1].endsWith('/') ? match[1] : match[1] + '/',
-                      posterUrl: match[2],
-                      type: "anime"
-                 }));
+             let results = [];
+             
+             // Try standard fetch.php 
+             try {
+                 const postBody = 'query=' + encodeURIComponent(query);
+                 const response = await axios.post(baseUrl + '/template-php/defaut/fetch.php', postBody, { 
+                     headers: { 
+                         'Content-Type': 'application/x-www-form-urlencoded',
+                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+                     } 
+                 });
+                 const html = response.data;
+                 const regex = /<a href="([^"]+)" class="asn-search-result"><img[^>]+src="([^"]+)"[^>]*><div[^>]*><h3[^>]*>([^<]+)<\/h3>/gi;
+                 let match;
+                 while((match = regex.exec(html)) !== null && results.length < 25) {
+                     if (match[1].includes('/scan/')) continue;
+                     
+                     let itemUrl = match[1].endsWith('/') ? match[1] : match[1] + '/';
+                     if (!itemUrl.startsWith('http')) itemUrl = baseUrl + itemUrl;
+                     
+                     let posterUrl = match[2];
+                     if (!posterUrl.startsWith('http')) posterUrl = baseUrl + posterUrl;
+                     
+                     results.push(new MultimediaItem({
+                          title: match[3].trim(),
+                          url: itemUrl,
+                          posterUrl: posterUrl,
+                          type: "anime"
+                     }));
+                 }
+             } catch(err1) {}
+             
+             // Fallback to sitemap if fetch.php fails or returns empty in mobile environment
+             if (results.length === 0) {
+                 const sitemapRes = await axios.get(baseUrl + '/sitemap.xml');
+                 const xml = sitemapRes.data;
+                 
+                 const queryClean = query.toLowerCase().replace(/[^a-z0-9]/g, '-');
+                 const sitemapRegex = /<loc>(https?:\/\/anime-sama\.to\/catalogue\/([^<]+)\/)<\/loc>/gi;
+                 let sMatch;
+                 
+                 while((sMatch = sitemapRegex.exec(xml)) !== null && results.length < 25) {
+                     let url = sMatch[1];
+                     let slug = sMatch[2];
+                     
+                     if (slug.includes('scan')) continue; // Skip scans
+                     
+                     // If slug matches query
+                     if (slug.includes(queryClean)) {
+                         let title = slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                         results.push(new MultimediaItem({
+                             title: title,
+                             url: url,
+                             posterUrl: baseUrl + '/img/contenu/' + slug + '.jpg', 
+                             type: "anime"
+                         }));
+                     }
+                 }
              }
+
              cb({ success: true, data: results });
         } catch (e) {
              cb({ success: false, errorCode: "SEARCH_ERROR", message: String(e) });
@@ -261,10 +307,11 @@
                 description = descMatch[1].replace(/<[^>]+>/g, '').trim();
             }
 
+            const cleanHtml = html.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*panneauAnime.*$/gm, '').replace(/<!--[\s\S]*?-->/g, '');
             const seasonRegex = /panneauAnime\s*\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']\s*\)/gi;
             let sMatch;
             const seasonEntries = [];
-            while ((sMatch = seasonRegex.exec(html)) !== null) {
+            while ((sMatch = seasonRegex.exec(cleanHtml)) !== null) {
                 const seasonTitle = sMatch[1].trim(); 
                 const seasonPath = sMatch[2].trim(); 
                 if(seasonPath.includes('vf') || seasonPath.includes('vostfr')) {
@@ -381,15 +428,11 @@
                     });
                     if (extracted.headers) proxyStream.headers = extracted.headers;
                     results.push(proxyStream);
-                } else {
-                    // It's an unextracted iframe/HTML URL. We MUST NOT wrap it in MAGIC_PROXY_v1
-                    // because MAGIC_PROXY_v1 forces ExoPlayer byte-proxy, which cannot play HTML pages.
-                    // The SkyStream core app will handle the raw iframe URL with its Webview Interceptor.
-                    results.push(new StreamResult({
-                        url: streamUrl,
-                        source: sourceName
-                    }));
                 }
+                // We REMOVED the unextracted iframe fallback intentionally. 
+                // The mobile app's ExoPlayer crashes on raw HTML pages unless strictly intercepted, 
+                // causing it to automatically fallback to Sibnet when Vidmoly is chosen.
+                // It is better to only show streams we can extract directly into mp4/m3u8.
             }
 
             cb({ success: true, data: results });
