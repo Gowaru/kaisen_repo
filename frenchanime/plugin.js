@@ -249,7 +249,7 @@
                 const finalUrl = url.replace('uqload.bz', 'uqload.com'); 
                 const res = await axios.get(finalUrl, { headers: { 'Referer': 'https://uqload.com' } });
                 const match = res.data.match(/sources:\s*\["([^"]+)"\]/i);
-                if (match) return { url: match[1], quality: 'Auto', source: 'Uqload' };
+                if (match) return { url: match[1], quality: 'Auto', source: 'Uqload', headers: { 'Referer': 'https://uqload.com' } };
             } catch (e) {} return null;
         },
         async extractVudeo(url) {
@@ -292,19 +292,9 @@
                     const resolved = await Extractors.resolveStream(streamUrl);
                     if (resolved) {
                         streams.push(resolved);
-                    } else {
-                        let sourceName = "Lecteur French-Anime";
-                        if(streamUrl.includes('sibnet')) sourceName = "Sibnet";
-                        else if(streamUrl.includes('myvi')) sourceName = "MyVi";
-                        else if(streamUrl.includes('uqload')) sourceName = "Uqload";
-                        else if(streamUrl.includes('vidoza')) sourceName = "Vidoza";
-                        else if(streamUrl.includes('sendvid')) sourceName = "Sendvid";
-                        else if(streamUrl.includes('vudeo')) sourceName = "Vudeo";
-                        
-                        streams.push(new StreamResult({ url: streamUrl, source: sourceName, quality: 'Auto' }));
                     }
+                    // DONT FALLBACK TO RAW HTML IF NOT RESOLVED, otherwise ExoPlayer crashes
                 } catch(e) {
-                    // ignore failure and continue
                 }
             }
             cb({ success: true, data: streams });
