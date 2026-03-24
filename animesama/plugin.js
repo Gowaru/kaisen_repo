@@ -321,6 +321,24 @@
                 const seasonPath = sMatch[2].trim(); 
                 if(seasonPath.includes('vf') || seasonPath.includes('vostfr')) {
                      seasonEntries.push({ title: seasonTitle, path: seasonPath });
+                     
+                     // Automatically inject the opposite language if it's explicitly 'vostfr' or 'vf'
+                     // This allows discovering VF links that are hidden in the player interface natively.
+                     if (seasonPath.includes('vostfr')) {
+                         seasonEntries.push({ title: seasonTitle, path: seasonPath.replace('vostfr', 'vf') });
+                     } else if (seasonPath.includes('/vf')) {
+                         seasonEntries.push({ title: seasonTitle, path: seasonPath.replace('/vf', '/vostfr') });
+                     }
+                }
+            }
+            
+            // Deduplicate to avoid fetching same URL twice if Anime-Sama explicitly listed both panels in HTML somehow
+            const uniquePaths = new Set();
+            const deduplicatedEntries = [];
+            for (const entry of seasonEntries) {
+                if (!uniquePaths.has(entry.path)) {
+                    uniquePaths.add(entry.path);
+                    deduplicatedEntries.push(entry);
                 }
             }
 
@@ -329,11 +347,18 @@
             }
 
             const eps = [];
-            let currentSeasonNumber = 1;
+            let baseSeasonNumber = 1;
+            const titleToSeasonNumber = {};
 
             // Fetch episodes for all seasons found
-            for (let sIdx = 0; sIdx < seasonEntries.length; sIdx++) {
-                const sEntry = seasonEntries[sIdx];
+            for (let sIdx = 0; sIdx < deduplicatedEntries.length; sIdx++) {
+                const sEntry = deduplicatedEntries[sIdx];
+                
+                let currentSeasonNumber = titleToSeasonNumber[sEntry.title];
+                if (!currentSeasonNumber) {
+                    currentSeasonNumber = baseSeasonNumber++;
+                    titleToSeasonNumber[sEntry.title] = currentSeasonNumber;
+                }
                 let jsUrl = rootUrl + sEntry.path;
                 if(!jsUrl.endsWith('/')) jsUrl += '/';
                 jsUrl += 'episodes.js';
@@ -395,8 +420,7 @@
                                 dubStatus: sEntry.path.includes('/vf') || sEntry.path.endsWith('vf') ? 'dub' : 'sub'
                             }));
                         }
-                        currentSeasonNumber++;
-                    }
+                        }
                 } catch(e) {} 
             }
 
