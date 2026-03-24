@@ -210,16 +210,21 @@
                 const epRes = await axios.get(`${parsedBase}/engine/ajax/full-story.php?newsId=${movieId}&d=${Date.now()}`, { headers });
                 
                 let htmlFrag = '';
-                if (typeof epRes.data === 'string') {
-                    try {
-                        let parsed = JSON.parse(epRes.data);
-                        htmlFrag = parsed.html || '';
-                    } catch(e) {
-                        htmlFrag = epRes.data;
+                let rawBody = typeof epRes.data === 'string' ? epRes.data : '';
+                try {
+                    if (typeof epRes.data === 'object' && epRes.data) {
+                        htmlFrag = epRes.data.html || JSON.stringify(epRes.data);
+                    } else if (rawBody) {
+                        let parsed = JSON.parse(rawBody);
+                        htmlFrag = parsed.html || rawBody;
                     }
-                } else if (epRes.data && epRes.data.html) {
-                    htmlFrag = epRes.data.html;
+                } catch(e) {
+                    htmlFrag = rawBody;
                 }
+                if(typeof htmlFrag !== 'string') {
+                    try { htmlFrag = JSON.stringify(htmlFrag); } catch(e) { htmlFrag = String(htmlFrag); }
+                }
+                htmlFrag = htmlFrag.replace(/\\"/g, '"').replace(/\\'/g, "'").replace(/\\\//g, '/');
                 
                 if (htmlFrag) {
                     const epRegex = /<a [^>]*class=["'][^"']*ep-item[^"']*["'][^>]*>/gi;
