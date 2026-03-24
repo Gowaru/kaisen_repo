@@ -37,6 +37,7 @@
         return Array.from(doc.querySelectorAll(selector));
     }
 
+    
     async function getHome(cb) {
         try {
             const res = await axios.get(baseUrl, { headers });
@@ -66,28 +67,55 @@
                 results['Tendance'] = trendingItems;
             }
 
-            // 2. Dernier épisode Ajouté (Grid)
-            const latestItems = [];
-            queryAll(doc, '.block_area_home .film_list-wrap .flw-item').forEach((el) => {
-                const linkEl = el.querySelector('.film-name a');
-                const imgEl = el.querySelector('img');
-                const epEl = el.querySelector('.tick-eps');
-                const title = linkEl?.textContent.trim();
-                const url = linkEl?.getAttribute('href');
-                const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
-                const ep = epEl?.textContent.trim();
-                if (title && url) {
-                    latestItems.push({
-                        title: (title + (ep ? ' - ' + ep : ''))?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
-                        url: url.startsWith('http') ? url : baseUrl + url,
-                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
-                        type: 'anime', playbackPolicy: 'none'
+            // General blocks
+            queryAll(doc, '.block_area_home, .block_area').forEach(block => {
+                const titleEl = block.querySelector('.cat-heading') || block.querySelector('h2');
+                const sectionTitle = titleEl ? titleEl.textContent.trim() : null;
+                if (!sectionTitle) return;
+
+                let items = [];
+                // Grid blocks (Dernier épisode, Dernier Anime, etc)
+                queryAll(block, '.film_list-wrap .flw-item').forEach(el => {
+                    const linkEl = el.querySelector('.film-name a') || el.querySelector('a');
+                    const imgEl = el.querySelector('img');
+                    const epEl = el.querySelector('.tick-eps');
+                    const title = linkEl?.textContent.trim() || el.querySelector('.film-name')?.textContent.trim();
+                    const url = linkEl?.getAttribute('href');
+                    const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
+                    const ep = epEl?.textContent.trim();
+                    if (title && url) {
+                        items.push({
+                            title: (title + (ep ? ' - ' + ep : ''))?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
+                            url: url.startsWith('http') ? url : baseUrl + url,
+                            posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
+                            type: 'anime', playbackPolicy: 'none'
+                        });
+                    }
+                });
+
+                // Top viewed block (Les plus regardés) - we take the #top-viewed-month one 
+                if (items.length === 0) {
+                    queryAll(block, '#top-viewed-month li').forEach(el => {
+                        const linkEl = el.querySelector('.film-name a') || el.querySelector('a');
+                        const imgEl = el.querySelector('img');
+                        const title = linkEl?.textContent.trim() || el.querySelector('.film-name')?.textContent.trim();
+                        const url = linkEl?.getAttribute('href');
+                        const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
+                        if (title && url) {
+                            items.push({
+                                title,
+                                url: url.startsWith('http') ? url : baseUrl + url,
+                                posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
+                                type: 'anime', playbackPolicy: 'none'
+                            });
+                        }
                     });
                 }
+
+                if (items.length > 0 && !results[sectionTitle]) {
+                    results[sectionTitle] = items;
+                }
             });
-            if (latestItems.length > 0) {
-                results['Dernier épisode Ajouté'] = latestItems;
-            }
 
             cb({ success: true, data: results });
         } catch (e) {
@@ -178,13 +206,40 @@
                 }
             }
 
+
+            const recommendations = [];
+            const recBlocks = doc.querySelectorAll('.block_area');
+            recBlocks.forEach((b) => {
+                const titleEl = b.querySelector('h2') || b.querySelector('.cat-heading');
+                const titleBlock = titleEl ? titleEl.textContent.trim() : null;
+                if (titleBlock && titleBlock.includes('Recommandé')) {
+                    const items = b.querySelectorAll('.flw-item');
+                    items.forEach(el => {
+                        const linkEl = el.querySelector('.film-name a') || el.querySelector('a');
+                        const imgEl = el.querySelector('img');
+                        const recTitle = linkEl?.textContent.trim() || el.querySelector('.film-name')?.textContent.trim();
+                        const recUrl = linkEl?.getAttribute('href');
+                        const recPoster = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
+                        if (recTitle && recUrl) {
+                            recommendations.push({
+                                title: recTitle,
+                                url: recUrl.startsWith('http') ? recUrl : baseUrl + recUrl,
+                                posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(recPoster?.startsWith('http') ? recPoster : (recPoster?.startsWith('/') ? baseUrl + recPoster : recPoster)),
+                                type: 'anime', playbackPolicy: 'none'
+                            });
+                        }
+                    });
+                }
+            });
+
             cb({
                 success: true,
                 data: new MultimediaItem({
                     title,
                     description,
                     posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
-                    episodes
+                    episodes,
+                    recommendations
                 })
             });
         } catch (e) {
