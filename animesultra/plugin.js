@@ -171,7 +171,11 @@
             const description = doc.querySelector('.film-description .text')?.textContent.trim();
             const posterUrl = doc.querySelector('.film-poster img')?.getAttribute('src');
             
-            let movieId = html.match(/var movie\s*=\s*{[^}]*id:\s*"(\d+)"/)?.[1];
+            let movieId = url.match(/\/(\d+)-/)?.[1];
+            if (!movieId) {
+                let matchRegex = html.match(/var movie\s*=\s*{[^}]*id:\s*"(\d+)"/);
+                movieId = matchRegex ? matchRegex[1] : null;
+            }
             if (!movieId) {
                 movieId = doc.querySelector('.film-poster-ahref')?.getAttribute('data-id') || doc.querySelector('[data-id]')?.getAttribute('data-id');
             }
