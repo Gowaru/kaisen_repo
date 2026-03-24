@@ -2,7 +2,7 @@
 
         
     const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://anime-sama.to';
-const axios = {
+    const axios = {
         get: async (url, config = {}) => {
             const h = config.headers || {};
             if (typeof http_get !== 'undefined') {
@@ -92,34 +92,104 @@ const axios = {
                 let host = 'Unknown'; try { host = new URL(url).hostname; } catch(e) {}
                 return new StreamResult({ url: url, quality: 'Auto', source: host });
             }
-            return null; // Return null so we can fallback to proxying the direct iframe
+            return null;
         }
     };
 
 
     async function getHome(cb) {
-        try {
+    try {
+        const response = await axios.get(baseUrl);
+        const html = response.data;
+
+        // Extract days blocks
+        const dayBlocks = html.split(/<h2 class="titreJours[^>]*>/gi);
+        // The first element is before any day, let's process it for "Dernières Sorties"
+        
+        const data = {};
+        
+        // We iterate through all day blocks, starting from 1
+        for (let i = 1; i < dayBlocks.length; i++) {
+            const block = dayBlocks[i];
             
-            const response = await axios.get(baseUrl);
-            const html = response.data;
+            // Extract the day title
+            const dayTitleMatch = block.match(/<\/svg>[\s\S]*?<\/a>\s*([^\s<][^<]+)\s*<a/i);
+            if (!dayTitleMatch) continue;
+            const dayTitle = dayTitleMatch[1].trim();
 
             const items = [];
-            // Catch a href="/catalogue/X/" and its img alt
-            const regex = /<a[^>]+href="([^"]*\/catalogue\/[^"]+)"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"[\s\S]*?alt="([^"]+)"/gi;
+            // Regex to catch cards with VOSTFR or VF indicators inside the block
+            const regex = /<div class="[^"]*(Anime|Scan)[^"]*(VF|VOSTFR)?[^"]*"[\s\S]*?<a[^>]+href="([^"]*\/catalogue\/[^"]+)"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"[\s\S]*?alt="([^"]+)"/gi;
             
+            let match;
+            const seenURLs = new Set();
+            while ((match = regex.exec(block)) !== null) {
+                if(match[1] && match[1].toLowerCase() === 'scan') continue; // Skip scans
+                
+                let lang = match[2] ? match[2] : '';
+                let url = match[3];
+                let posterUrl = match[4];
+                let title = match[5].trim();
+                
+                if (lang === 'VF') title += ' (VF)';
+                else if (lang === 'VOSTFR') title += ' (VOSTFR)';
+                else if (url.includes('/vf/')) title += ' (VF)';
+                else if (url.includes('/vostfr/')) title += ' (VOSTFR)';
+                
+                if (!url.startsWith('http')) {
+                    if (url.startsWith('/')) url = baseUrl + url;
+                    else url = baseUrl + '/' + url;
+                }
+                
+                let baseItemUrl = url;
+                // Keep only root catalogue url to fetch description correctly in load()
+                const rootMatch = url.match(/(https?:\/\/[^\/]+\/catalogue\/[^\/]+)/);
+                if (rootMatch) baseItemUrl = rootMatch[1] + '/';
+
+                const uniqueKey = baseItemUrl + "_" + lang;
+                
+                if(!seenURLs.has(uniqueKey)) {
+                    seenURLs.add(uniqueKey);
+                    
+                    if(!posterUrl.startsWith('http')) {
+                        posterUrl = baseUrl + posterUrl;
+                    }
+                    
+                    items.push(new MultimediaItem({
+                        title: title,
+                        url: baseItemUrl,
+                        posterUrl: posterUrl,
+                        type: "anime"
+                    }));
+                }
+            }
+            
+            if (items.length > 0) {
+                // Determine day, if "Mardi", make sure it comes nicely. We put it in the map.
+                data[dayTitle] = items;
+            }
+        }
+        
+        // If no days were processed (format change), fallback to the original latest logic for "Dernières Sorties"
+        if(Object.keys(data).length === 0) {
+            const items = [];
+            const regex = /<a[^>]+href="([^"]*\/catalogue\/[^"]+)"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"[\s\S]*?alt="([^"]+)"/gi;
             let match;
             let count = 0;
             const seenURLs = new Set();
 
             while ((match = regex.exec(html)) !== null && count < 15) {
                 let url = match[1];
+                if (url.includes('/scan/')) continue; // Skip scans
+                
                 if (!url.startsWith('http')) {
                     if (url.startsWith('/')) url = baseUrl + url;
                     else url = baseUrl + '/' + url;
                 }
                 
-                // No baseURL stripping, we need the exact season/lang link for episodes.js to work
                 let baseItemUrl = url;
+                const rootMatch = url.match(/(https?:\/\/[^\/]+\/catalogue\/[^\/]+)/);
+                if (rootMatch) baseItemUrl = rootMatch[1] + '/';
 
                 if(!seenURLs.has(baseItemUrl)) {
                     seenURLs.add(baseItemUrl);
@@ -132,110 +202,144 @@ const axios = {
                     count++;
                 }
             }
+            data["Dernières Sorties"] = items;
+        }
 
-            cb({ 
-                success: true, 
-                data: { 
-                    "Dernières Sorties": items 
-                } 
-            });
-        } catch (e) {
+        cb({ 
+            success: true, 
+            data: data
+        });
+    } catch (e) {
             cb({ success: false, errorCode: "PARSE_ERROR", message: String(e) });
         }
     }
 
     async function search(query, cb) {
-        cb({ success: true, data: [] });
+        try {
+             const response = await axios.post(baseUrl + '/template-php/defaut/fetch.php', 'query=' + encodeURIComponent(query), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+             const html = response.data;
+             const results = [];
+             const regex = /<a href="([^"]+)" class="asn-search-result"><img[^>]+src="([^"]+)"[^>]*><div[^>]*><h3[^>]*>([^<]+)<\/h3>/gi;
+             let match;
+             while((match = regex.exec(html)) !== null && results.length < 25) {
+                 if (match[1].includes('/scan/')) continue;
+                 results.push(new MultimediaItem({
+                      title: match[3].trim(),
+                      url: match[1].endsWith('/') ? match[1] : match[1] + '/',
+                      posterUrl: match[2],
+                      type: "anime"
+                 }));
+             }
+             cb({ success: true, data: results });
+        } catch (e) {
+             cb({ success: false, errorCode: "SEARCH_ERROR", message: String(e) });
+        }
     }
 
     async function load(url, cb) {
         try {
-            // Basic detection
-            let jsUrl;
-            if (url.endsWith('episodes.js')) {
-                 jsUrl = url;
-            } else {
-                 if(!url.endsWith('/')) url += '/';
-                 jsUrl = url + 'episodes.js';
-            }
-            
+            let rootUrl = url;
+            const rootMatch = url.match(/(https?:\/\/[^\/]+\/catalogue\/[^\/]+)/);
+            if (rootMatch) rootUrl = rootMatch[1] + '/';
+
+            const htmlRes = await axios.get(rootUrl);
+            const html = htmlRes.data;
+
             let posterUrl = "";
+            const imgMatch = html.match(/id="imgOeuvre"[^>]*src="([^"]+)"/i) || html.match(/property="og:image"[^>]*content="([^"]+)"/i);
+            if(imgMatch) posterUrl = imgMatch[1];
+            
             let actualTitle = "Anime-Sama";
-            if (!url.endsWith('episodes.js')) {
-                try {
-                    const htmlRes = await axios.get(url);
-                    const html = htmlRes.data;
-                    const imgMatch = html.match(/id="imgOeuvre"[^>]*src="([^"]+)"/i) || html.match(/property="og:image"[^>]*content="([^"]+)"/i);
-                    if(imgMatch) posterUrl = imgMatch[1];
-                    const titleMatch = html.match(/<title>([^<]+)<\/title>/i) || html.match(/<h2[^>]*>([^<]+)<\/h2>/i);
-                    if(titleMatch) {
-                        actualTitle = titleMatch[1].split('- Saison')[0].replace('Anime-Sama', '').replace('|', '').trim();
-                    }
-                } catch(e) {}
+            const titleMatch = html.match(/<h1[^>]*>([^<]+)<\/h1>/i) || html.match(/<title>([^<]+)<\/title>/i);
+            if(titleMatch) {
+                actualTitle = titleMatch[1].split('- Saison')[0].replace('Anime-Sama', '').replace(/\|/g, '').replace('Streaming et catalogage', '').trim();
             }
-            
-            const response = await axios.get(jsUrl);
-            const jsData = response.data; // Raw JS text
 
-            // Parse all var epsX = ['...']
-            const epsRegex = /var\s+eps\d+\s*=\s*\[([\s\S]*?)\]/gi;
-            let match;
-            const players = [];
+            let description = "";
+            const descMatch = html.match(/<h2[^>]*>Synopsis<\/h2>\s*<p[^>]*>([\s\S]*?)<\/p>/i);
+            if(descMatch) {
+                description = descMatch[1].replace(/<[^>]+>/g, '').trim();
+            }
 
-            while ((match = epsRegex.exec(jsData)) !== null) {
-                const rawLinks = match[1].split(',').map(s => s.replace(/['"\s\n\r]+/g, '').trim());
-                // Remove empty strings
-                const cleanLinks = rawLinks.filter(l => l.length > 5);
-                if (cleanLinks.length > 0) {
-                    players.push(cleanLinks);
+            const seasonRegex = /panneauAnime\s*\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']\s*\)/gi;
+            let sMatch;
+            const seasonEntries = [];
+            while ((sMatch = seasonRegex.exec(html)) !== null) {
+                const seasonTitle = sMatch[1].trim(); 
+                const seasonPath = sMatch[2].trim(); 
+                if(seasonPath.includes('vf') || seasonPath.includes('vostfr')) {
+                     seasonEntries.push({ title: seasonTitle, path: seasonPath });
                 }
             }
 
-            if (players.length === 0) {
-                return cb({ success: false, errorCode: "EPISODES_NOT_FOUND", message: `No eps array found in ${jsUrl}` });
+            if (seasonEntries.length === 0) {
+                return cb({ success: false, message: "Auncun épisode animé trouvé. Il s'agit peut-être d'un scan..." });
             }
 
-            // Assume player[0] length is the number of episodes
-            const epCount = players[0].length;
             const eps = [];
-            
-            for (let i = 0; i < epCount; i++) {
-                // Collect all player links for episode `i`
-                const episodeStreams = [];
-                for (let p = 0; p < players.length; p++) {
-                    if (players[p][i]) {
-                        episodeStreams.push(players[p][i]);
-                    }
-                }
+            let currentSeasonNumber = 1;
 
-                eps.push(new Episode({
-                    name: "Épisode " + (i + 1),
-                    episode: i + 1,
-                    posterUrl: posterUrl,
-                    // We pack the streams into the URL field!
-                    url: JSON.stringify(episodeStreams),
-                    season: 1,
-                    dubStatus: url.includes('/vf/') ? 'dub' : 'sub'
-                }));
+            // Fetch episodes for all seasons found
+            for (let sIdx = 0; sIdx < seasonEntries.length; sIdx++) {
+                const sEntry = seasonEntries[sIdx];
+                let jsUrl = rootUrl + sEntry.path;
+                if(!jsUrl.endsWith('/')) jsUrl += '/';
+                jsUrl += 'episodes.js';
+
+                try {
+                    const jsRes = await axios.get(jsUrl);
+                    const jsData = jsRes.data;
+
+                    const epsRegex = /var\s+eps\d+\s*=\s*\[([\s\S]*?)\]/gi;
+                    let ematch;
+                    const players = [];
+
+                    while ((ematch = epsRegex.exec(jsData)) !== null) {
+                        const rawLinks = ematch[1].split(',').map(s => s.replace(/['"\s\n\r]+/g, '').trim());
+                        const cleanLinks = rawLinks.filter(l => l.length > 5);
+                        if (cleanLinks.length > 0) {
+                            players.push(cleanLinks);
+                        }
+                    }
+
+                    if (players.length > 0) {
+                        const epCount = players[0].length;
+                        for (let i = 0; i < epCount; i++) {
+                            const episodeStreams = [];
+                            for (let p = 0; p < players.length; p++) {
+                                if (players[p][i]) {
+                                    episodeStreams.push(players[p][i]);
+                                }
+                            }
+                            
+                            let epName = sEntry.title.toLowerCase().includes('film') ? "Film " + (i + 1) : "Épisode " + (i + 1);
+
+                            eps.push(new Episode({
+                                name: epName,
+                                episode: i + 1,
+                                posterUrl: posterUrl,
+                                url: JSON.stringify(episodeStreams),
+                                season: currentSeasonNumber,
+                                dubStatus: sEntry.path.includes('/vf') || sEntry.path.endsWith('vf') ? 'dub' : 'sub'
+                            }));
+                        }
+                        currentSeasonNumber++;
+                    }
+                } catch(e) {} 
             }
 
-            // Also try to extract a title from the URL slug
-            const parts = url.split('/');
-            let title = actualTitle && actualTitle !== "Anime-Sama" ? actualTitle : "Anime-Sama"; // Fallback URL parsing below if still empty
-            for(let p of parts) {
-                if(p !== "catalogue" && p !== "saison1" && p !== "saison2" && p !== "vostfr" && p !== "vf" && p !== "https:" && p !== "anime-sama.to" && p !== "" && p !== "episodes.js") {
-                    title = p.replace(/-/g, ' ').toUpperCase();
-                    break;
-                }
+            if (eps.length === 0) {
+                return cb({ success: false, errorCode: "EPISODES_NOT_FOUND", message: "Impossible de parser les liens." });
             }
 
             cb({ 
                 success: true, 
                 data: new MultimediaItem({
-                    title: title,
-                    url: url.replace('episodes.js', ''),
+                    title: actualTitle,
+                    url: rootUrl,
                     type: "anime",
                     posterUrl: posterUrl,
+                    description: description,
                     episodes: eps
                 })
             });
