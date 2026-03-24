@@ -81,6 +81,7 @@
             if (url.includes('vidoza.net')) finalStream = await this.extractVidoza(url);
             else if (url.includes('sibnet.ru')) finalStream = await this.extractSibnet(url);
             else if (url.includes('sendvid.com')) finalStream = await this.extractSendvid(url);
+            else if (url.includes('vidmoly')) finalStream = { url: url, quality: 'Auto', source: 'Vidmoly', headers: { Referer: 'https://vidmoly.to/' } };
             
             if (finalStream) {
                 return new StreamResult({
@@ -453,8 +454,6 @@
             } catch(ign) {
                 episodeStreams = [url];
             }
-
-            
             
             const results = [];
             for (let i = 0; i < episodeStreams.length; i++) {

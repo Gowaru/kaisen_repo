@@ -259,6 +259,7 @@ const axios = {
             if (url.includes('vidoza.net')) finalStream = await this.extractVidoza(url);
             else if (url.includes('sibnet.ru')) finalStream = await this.extractSibnet(url);
             else if (url.includes('sendvid.com')) finalStream = await this.extractSendvid(url);
+            else if (url.includes('vidmoly')) finalStream = { url: url, quality: 'Auto', source: 'Vidmoly', headers: { 'Referer': 'https://vidmoly.to/' } };
             else if (url.includes('streamtape.com')) finalStream = await this.extractStreamtape(url);
             else if (url.includes('uqload')) finalStream = await this.extractUqload(url);
             

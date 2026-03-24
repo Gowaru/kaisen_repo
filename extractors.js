@@ -77,6 +77,8 @@ const Extractors = {
             finalStream = await this.extractSibnet(url);
         } else if (url.includes('sendvid.com')) {
             finalStream = await this.extractSendvid(url);
+        } else if (url.includes('vidmoly.to') || url.includes('vidmoly.me') || url.includes('vidmoly')) {
+            finalStream = { url: url, quality: 'Auto', source: 'Vidmoly', headers: { 'Referer': 'https://vidmoly.to/' } };
         } else if (url.includes('streamtape.com')) {
             finalStream = await this.extractStreamtape(url);
         } else if (url.includes('uqload')) {
