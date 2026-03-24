@@ -200,11 +200,8 @@
             if (isNaN(duration)) duration = null;
 
             const episodes = [];
-            let debugInfo = [];
-            let matchCount = 0;
             if (movieId) {
                 
-                debugInfo.push('MID='+movieId);
                 let parsedBase = baseUrl;
                 try {
                     const match = url.split('/').slice(0, 3).join('/');
@@ -212,7 +209,6 @@
                 } catch(e) {}
                 const epRes = await axios.get(`${parsedBase}/engine/ajax/full-story.php?newsId=${movieId}&d=${Date.now()}`, { headers });
                 
-                debugInfo.push('R='+epRes.status+'-'+(typeof epRes.data)+'-'+(epRes.data?Object.keys(epRes.data||{}).length:0));
                 let htmlFrag = '';
                 let rawBody = typeof epRes.data === 'string' ? epRes.data : '';
                 try {
@@ -230,13 +226,10 @@
                 }
                 htmlFrag = htmlFrag.replace(/\\"/g, '"').replace(/\\'/g, "'").replace(/\\\//g, '/');
                 
-                debugInfo.push('HLEN='+(htmlFrag?htmlFrag.length:0));
-                
                 if (htmlFrag) {
                     const epRegex = /<a [^>]*class=["'][^"']*ep-item[^"']*["'][^>]*>/gi;
                     let match;
                     while ((match = epRegex.exec(htmlFrag)) !== null) {
-                        matchCount++;
                         const aTag = match[0];
                         const epUrlMatch = aTag.match(/href=["']([^"']+)["']/);
                         const numMatch = aTag.match(/data-number=["'](\d+)["']/);
@@ -259,7 +252,6 @@
             }
 
 
-            debugInfo.push('C='+matchCount);
             const recommendations = [];
             const recBlocks = doc.querySelectorAll('.block_area');
             recBlocks.forEach((b) => {
@@ -288,8 +280,9 @@
             cb({
                 success: true,
                 data: new MultimediaItem({
+                    type: "anime",
                     title,
-                    description: description + ' | D:' + debugInfo.join(' '),
+                    description: description, // Removing debug text as it's no longer needed
                     posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl?.startsWith('http') ? posterUrl : (posterUrl?.startsWith('/') ? baseUrl + posterUrl : posterUrl)),
                     year,
                     duration,
