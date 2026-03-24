@@ -21,13 +21,10 @@
             }
             return { data: "" };
         }
-    };
-
-    
-    
+    }; 
     
     const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://animesultra.net';
-const headers = {
+    const headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
         'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -157,11 +154,22 @@ const headers = {
                 if (epRes.data && epRes.data.status) {
                     const epDoc = await parseHtml(epRes.data.html);
                     queryAll(epDoc, '.ep-item').forEach((el) => {
-                        const epTitle = el.getAttribute('title') || el.textContent.trim();
+                        const dataNum = el.getAttribute('data-number');
+                        const innerTitle = el.querySelector ? el.querySelector('.ep-name')?.textContent.trim() : null;
+                        const epTitle = innerTitle || el.getAttribute('title') || el.textContent.trim();
                         const epUrl = el.getAttribute('href');
                         if (epUrl) {
+                            let epNum = 0;
+                            if (dataNum) {
+                                epNum = parseInt(dataNum, 10);
+                            } else if (epTitle && epTitle.match(/\\d+/)) {
+                                epNum = parseInt(epTitle.match(/\\d+/)[0], 10);
+                            }
+                            if (isNaN(epNum)) epNum = 0;
+
                             episodes.push(new Episode({
-                                name: epTitle, episode: epTitle.match(/\d+/) ? parseInt(epTitle.match(/\d+/)[0], 10) : 0,
+                                name: epTitle, 
+                                episode: epNum,
                                 url: epUrl.startsWith('http') ? epUrl : baseUrl + epUrl,
                                 season: 1
                             }));
