@@ -277,8 +277,7 @@
                 });
             }
             
-            let host = 'Unknown'; try { host = new URL(url).hostname; } catch(e) {}
-            return new StreamResult({ url: url, quality: 'Auto', source: host });
+            return null;
         }
     };
 
@@ -286,15 +285,26 @@
         try {
             let streamUrls = []; try { streamUrls = JSON.parse(url); } catch(e) {}
             const streams = [];
-            for (const streamUrl of streamUrls) {
-                let sourceName = "Lecteur French-Anime";
-                if(streamUrl.includes('sibnet')) sourceName = "Sibnet";
-                else if(streamUrl.includes('myvi')) sourceName = "MyVi";
-                else if(streamUrl.includes('uqload')) sourceName = "Uqload";
-                else if(streamUrl.includes('vidoza')) sourceName = "Vidoza";
-                else if(streamUrl.includes('sendvid')) sourceName = "Sendvid";
-                
-                streams.push(new StreamResult({ url: streamUrl, source: sourceName, quality: 'Auto' }));
+            for (let streamUrl of streamUrls) {
+                if (streamUrl.startsWith('//')) streamUrl = 'https:' + streamUrl;
+                try {
+                    const resolved = await Extractors.resolveStream(streamUrl);
+                    if (resolved) {
+                        streams.push(resolved);
+                    } else {
+                        let sourceName = "Lecteur French-Anime";
+                        if(streamUrl.includes('sibnet')) sourceName = "Sibnet";
+                        else if(streamUrl.includes('myvi')) sourceName = "MyVi";
+                        else if(streamUrl.includes('uqload')) sourceName = "Uqload";
+                        else if(streamUrl.includes('vidoza')) sourceName = "Vidoza";
+                        else if(streamUrl.includes('sendvid')) sourceName = "Sendvid";
+                        else if(streamUrl.includes('vudeo')) sourceName = "Vudeo";
+                        
+                        streams.push(new StreamResult({ url: streamUrl, source: sourceName, quality: 'Auto' }));
+                    }
+                } catch(e) {
+                    // ignore failure and continue
+                }
             }
             cb({ success: true, data: streams });
         } catch (e) {
