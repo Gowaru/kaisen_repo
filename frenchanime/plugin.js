@@ -204,8 +204,6 @@
             let lineMatch;
             const added = new Set();
             
-            // Check global title or URL for obvious dub status.
-            // Explicitly search itemprop="inLanguage" text and other metadata if needed.
             const langMatch = html.match(/<span itemprop="inLanguage">([^<]+)\/span>/i);
             const inLanguage = langMatch ? langMatch[1].toUpperCase() : "";
             
@@ -216,6 +214,17 @@
             const isGloballyVOSTFR = url.includes('-vostfr') || title.toUpperCase().includes('VOSTFR') || checkLanguage.includes('VOSTFR');
             const isGloballyVF = (!isGloballyVOSTFR && (url.includes('-vf') || url.includes('-french') || title.toUpperCase().includes('FRENCH') || title.toUpperCase().includes(' VF') || checkLanguage.includes('VF') || checkLanguage.includes('FRENCH')));
             
+            let seasonNumber = 1;
+            const seasonMatch = title.match(/saison\s*(\d+)/i) || title.match(/season\s*(\d+)/i) || originalTitle.match(/season\s*(\d+)/i) || originalTitle.match(/saison\s*(\d+)/i);
+            if (seasonMatch) {
+                seasonNumber = parseInt(seasonMatch[1], 10);
+            } else {
+                const numMatch = title.replace(/(vostfr|vf|french)\b/ig, '').trim().match(/\s+([2-9]|\d{2,})$/);
+                if (numMatch) {
+                    seasonNumber = parseInt(numMatch[1], 10);
+                }
+            }
+
             while ((lineMatch = lineRegex.exec(html)) !== null) {
                 const epNameRaw = lineMatch[1].trim();
                 if(epNameRaw.length > 30 || added.has(epNameRaw)) continue; 
@@ -234,7 +243,6 @@
                 }
 
                 
-                // If the episode name has VF or VOSTFR explicitely, clean it and set correct dub
                 if (epName.toLowerCase().includes('vostfr')) {
                     localDubStatus = 'sub';
                     epName = epName.replace(/vostfr/ig, '').trim();
@@ -251,14 +259,31 @@
                     episode: parseInt(epName.match(/\d+/) ? epName.match(/\d+/)[0] : 0, 10) || 1,
                     posterUrl: posterUrl,
                     url: JSON.stringify(formattedUrls),
-                    season: 1,
+                    season: seasonNumber,
                     dubStatus: localDubStatus,
                     description: localDubStatus === 'dub' ? 'Version Française (VF)' : 'Version Originale Sous-Titrée (VOSTFR)'
                 }));
             }
             
             if (eps.length === 0) {
-                eps.push(new Episode({ name: "Film / Unique", episode: 1, posterUrl: posterUrl, url: "[]", season: 1, dubStatus: url.includes('-vf-') || url.includes('-vf.') ? 'dub' : 'sub' }));
+                eps.push(new Episode({ name: "Film / Unique", episode: 1, posterUrl: posterUrl, url: "[]", season: seasonNumber, dubStatus: url.includes('-vf-') || url.includes('-vf.') ? 'dub' : 'sub' }));
+            }
+            
+            // Collect related sync series (other seasons/films linked on the same page)
+            const syncData = { recommendations: [] };
+            const relatedMatch = html.match(/<a class="mov-t nowrap" href="([^"]+)">([^<]+)<\/a>/g);
+            if (relatedMatch) {
+                relatedMatch.forEach(rm => {
+                    const m = rm.match(/href="([^"]+)">([^<]+)</);
+                    if (m && m[1] !== url && m[2] !== title) {
+                        syncData.recommendations.push(new MultimediaItem({
+                            title: m[2].trim(),
+                            url: m[1].startsWith('http') ? m[1] : baseUrl + m[1],
+                            posterUrl: posterUrl,
+                            type: "series"
+                        }));
+                    }
+                });
             }
 
             cb({ 
@@ -267,7 +292,8 @@
                     title: title, url: url, posterUrl: posterUrl,
                     type: eps.length > 1 ? "series" : "movie",
                     description: description, year: parseInt(year) || null,
-                    episodes: eps
+                    episodes: eps,
+                    syncData: Object.keys(syncData).length > 0 ? syncData : undefined
                 })
             });
         } catch (e) { cb({ success: false, errorCode: "LOAD_ERROR", message: String(e) }); }
