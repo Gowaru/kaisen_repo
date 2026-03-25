@@ -207,7 +207,7 @@
                 if (seasonMatch) {
                     blocksFound = true;
                     const parsedSeason = parseInt(seasonMatch[1], 10);
-                    const parent = h2.parentElement;
+                    const parent = h2.parentElement || h2.parentNode;
                     const epLinks = parent ? parent.querySelectorAll('.episode-link, .ep-list-all a, .episodes a') : [];
                     
                     if (epLinks.length > 0) {
