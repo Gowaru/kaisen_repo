@@ -260,7 +260,18 @@
             } catch (e) {} return null;
         },
         async extractVidmoly(url) {
-            return { url: url, quality: 'Auto', source: 'Vidmoly', headers: { 'Referer': 'https://vidmoly.to/' } };
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': 'https://vidmoly.to/' } });
+                const match = res.data.match(/file:\s*["']([^"']+\.mp4)["']/i) || res.data.match(/file:\s*["']([^"']+\.m3u8[^"']*)["']/i);
+                if (match) return { url: match[1], quality: 'Auto', source: 'Vidmoly', headers: { 'Referer': 'https://vidmoly.to/' } };
+            } catch (e) {} return null;
+        },
+        async extractLuluvid(url) {
+            try {
+                const res = await axios.get(url);
+                const match = res.data.match(/file:\s*["']([^"']+\.mp4)["']/i) || res.data.match(/file:\s*["']([^"']+\.m3u8[^"']*)["']/i);
+                if (match) return { url: match[1], quality: 'Auto', source: 'Luluvid' };
+            } catch (e) {} return null;
         },
         async resolveStream(url) {
             let finalStream = null;
@@ -270,6 +281,7 @@
             else if (url.includes('uqload')) finalStream = await this.extractUqload(url);
             else if (url.includes('vudeo')) finalStream = await this.extractVudeo(url);
             else if (url.includes('vidmoly')) finalStream = await this.extractVidmoly(url);
+            else if (url.includes('luluvid')) finalStream = await this.extractLuluvid(url);
             
             if (finalStream) {
                 return new StreamResult({
@@ -278,7 +290,7 @@
                 });
             }
             
-            return null; // Return null so it falls back to the original URL
+            return null;
         }
     };
 
@@ -293,7 +305,6 @@
                     if (resolved) {
                         streams.push(resolved);
                     }
-                    // DONT FALLBACK TO RAW HTML IF NOT RESOLVED, otherwise ExoPlayer crashes
                 } catch(e) {
                 }
             }
