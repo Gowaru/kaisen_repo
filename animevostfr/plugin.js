@@ -49,61 +49,36 @@
             const data = {};
 
             // Parse sections like "Derniers Animes", "Derniers Films", etc.
-            const lists = doc.querySelectorAll('ul.MovieList');
-            lists.forEach(list => {
-                let sectionTitle = null;
-                let current = list.previousElementSibling;
-                while (current) {
-                    if (current.tagName && current.tagName.match(/^H[1-6]/) && current.classList.contains('Title')) {
-                        sectionTitle = current.textContent.trim();
-                        break;
-                    }
-                    const headerInside = current.querySelector ? current.querySelector('.Title') : null;
-                    if (headerInside) {
-                        sectionTitle = headerInside.textContent.trim();
-                        break;
-                    }
-                    current = current.previousElementSibling;
-                }
+            const wrappers = doc.querySelectorAll('section, .Wdgt');
+            wrappers.forEach(wrap => {
+                const titleEl = wrap.querySelector('.Title');
+                const list = wrap.querySelector('ul.MovieList');
                 
-                if (!sectionTitle && list.parentElement) {
-                    current = list.parentElement.previousElementSibling;
-                    while (current) {
-                        if (current.tagName && current.tagName.match(/^H[1-6]/) && current.classList.contains('Title')) {
-                            sectionTitle = current.textContent.trim();
-                            break;
-                        }
-                        const headerInside = current.querySelector ? current.querySelector('.Title') : null;
-                        if (headerInside) {
-                            sectionTitle = headerInside.textContent.trim();
-                            break;
-                        }
-                        current = current.previousElementSibling;
-                    }
-                }
-                
-                if (!sectionTitle) sectionTitle = "Sélection " + (Object.keys(data).length + 1);
+                if (titleEl && list) {
+                    const sectionTitle = titleEl.textContent.trim();
+                    const items = [];
+                    const entries = list.querySelectorAll('.TPost');
+                    
+                    entries.forEach(entry => {
+                        const tEl = entry.querySelector('.Title');
+                        const imgEl = entry.querySelector('img');
+                        const linkEl = entry.querySelector('a');
 
-                const items = [];
-                const entries = list.querySelectorAll('.TPost');
-                entries.forEach(entry => {
-                    const titleEl = entry.querySelector('.Title, .Title');
-                    const imgEl = entry.querySelector('img');
-                    const linkEl = entry.querySelector('a');
-
-                    if (titleEl && linkEl) {
-                        items.push(new (typeof MultimediaItem !== 'undefined' ? MultimediaItem : Object)({
-                            title: titleEl.textContent.trim().replace('Anime', '').trim(),
-                            url: linkEl.getAttribute('href'),
-                            posterUrl: imgEl ? imgEl.getAttribute('src') : '',
-                            type: 'anime',
-                            status: 'ongoing',
-                            playbackPolicy: 'none'
-                        }));
+                        if (tEl && linkEl) {
+                            items.push(new (typeof MultimediaItem !== 'undefined' ? MultimediaItem : Object)({
+                                title: tEl.textContent.trim().replace('Anime', '').trim(),
+                                url: linkEl.getAttribute('href'),
+                                posterUrl: imgEl ? imgEl.getAttribute('src') : '',
+                                type: 'anime',
+                                status: 'ongoing',
+                                playbackPolicy: 'none'
+                            }));
+                        }
+                    });
+                    
+                    if (items.length > 0 && sectionTitle) {
+                        data[sectionTitle] = items;
                     }
-                });
-                if (items.length > 0) {
-                    data[sectionTitle] = items;
                 }
             });
 
@@ -139,32 +114,60 @@
         }
     }
 
+    async function getAltTitles(query) {
+        try {
+            const rq = await axios.post('https://graphql.anilist.co', JSON.stringify({
+                query: `query ($search: String) { Media(search: $search, type: ANIME) { title { romaji english } } }`,
+                variables: { search: query }
+            }), { headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' } });
+            let titles = [];
+            if(rq.data?.data?.Media?.title) {
+                const t = rq.data.data.Media.title;
+                if(t.romaji) titles.push(t.romaji);
+                if(t.english) titles.push(t.english);
+            }
+            return titles;
+        } catch(e) { return []; }   
+    }
+
     async function search(query, cb) {
         try {
-            const url = `${baseUrl}?s=${encodeURIComponent(query)}`;
-            const res = await axios.get(url, { headers });
-            const doc = await parseHtml(res.data);
-            const items = [];
+            let queries = [query];
+            const alt = await getAltTitles(query);
+            queries = [...new Set([...queries, ...alt])];
+            
+            const results = [];
+            const seen = new Set();
 
-            const entries = doc.querySelectorAll('article.TPost');
-            entries.forEach(entry => {
-                const titleEl = entry.querySelector('h3.Title, .Title');
-                const imgEl = entry.querySelector('img');
-                const linkEl = entry.querySelector('a');
+            for (let q of queries) {
+                const url = `${baseUrl}?s=${encodeURIComponent(q.trim())}`;
+                const res = await axios.get(url, { headers });
+                const doc = await parseHtml(res.data);
 
-                if (titleEl && linkEl) {
-                    items.push(new (typeof MultimediaItem !== 'undefined' ? MultimediaItem : Object)({
-                        title: titleEl.textContent.trim().replace('Anime', '').trim(),
-                        url: linkEl.getAttribute('href'),
-                        posterUrl: imgEl ? imgEl.getAttribute('src') : '',
-                        type: 'anime',
-                        status: 'ongoing',
-                        playbackPolicy: 'none'
-                    }));
-                }
-            });
+                const entries = doc.querySelectorAll('article.TPost');
+                entries.forEach(entry => {
+                    const titleEl = entry.querySelector('h3.Title, .Title');
+                    const imgEl = entry.querySelector('img');
+                    const linkEl = entry.querySelector('a');
 
-            cb({ success: true, data: items });
+                    if (titleEl && linkEl) {
+                        const itemUrl = linkEl.getAttribute('href');
+                        if (!seen.has(itemUrl)) {
+                            seen.add(itemUrl);
+                            results.push(new (typeof MultimediaItem !== 'undefined' ? MultimediaItem : Object)({
+                                title: titleEl.textContent.trim().replace('Anime', '').trim(),
+                                url: itemUrl,
+                                posterUrl: imgEl ? imgEl.getAttribute('src') : '',
+                                type: 'anime',
+                                status: 'ongoing',
+                                playbackPolicy: 'none'
+                            }));
+                        }
+                    }
+                });
+            }
+
+            cb({ success: true, data: results });
         } catch (e) {
             console.error(e);
             cb({ success: false, errorCode: "SEARCH_ERROR", message: e.stack });
@@ -218,6 +221,8 @@
                                 name: epName,
                                 episode: episodeNum,
                                 url: link.getAttribute('href'),
+                                posterUrl: posterUrl,
+                                dubStatus: link.getAttribute('href').includes('vostfr') ? 'sub' : (link.getAttribute('href').includes('vf') ? 'dub' : 'sub'),
                                 playbackPolicy: 'none'
                             }));
                         });
@@ -239,6 +244,8 @@
                             name: epName,
                             episode: episodeNum,
                             url: link.getAttribute('href'),
+                            posterUrl: posterUrl,
+                            dubStatus: link.getAttribute('href').includes('vostfr') ? 'sub' : (link.getAttribute('href').includes('vf') ? 'dub' : 'sub'),
                             playbackPolicy: 'none'
                         }));
                     });
@@ -259,7 +266,7 @@
                     posterUrl,
                     year,
                     duration,
-                    type: "anime",
+                    type: episodes.length > 1 ? "series" : "movie",
                     episodes: episodes
                 })
             });
