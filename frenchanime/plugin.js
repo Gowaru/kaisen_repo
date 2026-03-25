@@ -32,10 +32,11 @@
             const results = {};
             
             function parseItem(item) {
-                const a = item.querySelector('a');
+                const a = item.querySelector('a') || item.querySelector('.ps-link');
                 const img = item.querySelector('img');
-                if (!a || !img) return null;
-                const url = a.getAttribute('href');
+                if (!img) return null;
+                const url = (a && a.getAttribute('href')) ? a.getAttribute('href') : (a && a.getAttribute('data-link'));
+                if (!url) return null;
                 let title = img.getAttribute('alt') || item.querySelector('.mov-t, .mov-title')?.textContent || "Anime";
                 title = title.replace(/wiflix/gi, '').trim();
                 let posterUrl = img.getAttribute('data-src') || img.getAttribute('src') || '';
@@ -48,7 +49,7 @@
 
             const mainMovs = Array.from(doc.querySelectorAll('.mov')).slice(0, 20);
             const mainItems = mainMovs.map(parseItem).filter(Boolean);
-            if(mainItems.length > 0) results["Derniers Ajouts"] = mainItems;
+            if(mainItems.length > 0) results["Derniers Ajouts (Mixte)"] = mainItems;
 
             const sideMovs = Array.from(doc.querySelectorAll('.mov-side')).slice(0, 15);
             const sideItems = sideMovs.map(item => {
@@ -59,6 +60,24 @@
                 return dt;
             }).filter(Boolean);
             if(sideItems.length > 0) results["Populaires / Tendances"] = sideItems;
+
+            // Fetch VF Page
+            try {
+               const { data: vfHtml } = await axios.get(baseUrl + '/animes-vf/');
+               const vfDoc = await parseHtml(vfHtml);
+               const vfMovs = Array.from(vfDoc.querySelectorAll('.mov')).slice(0, 15);
+               const vfItems = vfMovs.map(parseItem).filter(Boolean);
+               if(vfItems.length > 0) results["Récemment Ajoutés (VF)"] = vfItems;
+            } catch(e) {}
+
+            // Fetch VOSTFR Page
+            try {
+               const { data: vostfrHtml } = await axios.get(baseUrl + '/animes-vostfr/');
+               const vostfrDoc = await parseHtml(vostfrHtml);
+               const vostfrMovs = Array.from(vostfrDoc.querySelectorAll('.mov')).slice(0, 15);
+               const vostfrItems = vostfrMovs.map(parseItem).filter(Boolean);
+               if(vostfrItems.length > 0) results["Récemment Ajoutés (VOSTFR)"] = vostfrItems;
+            } catch(e) {}
 
             cb({ success: true, data: results });
         } catch(e) {
