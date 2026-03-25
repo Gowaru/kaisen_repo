@@ -198,22 +198,30 @@
             }
 
             const episodes = [];
-            const epLinks = doc.querySelectorAll('.episode-link, .ep-list-all a, .episodes a');
+            const seenUrls = new Set();
+            const streamElements = doc.querySelectorAll('h2, .episode-link, .ep-list-all a, .episodes a');
+            let currentSeason = 1;
             
-            if (epLinks.length > 0) {
-                Array.from(epLinks).reverse().forEach((link, idx) => {
-                    const titleText = link.textContent.trim();
-                    const hrefText = link.getAttribute('href') || '';
-                    
-                    let seasonNum = 1;
-                    const sMatch = titleText.match(/Saison\s+(\d+)/i) || hrefText.match(/saison-(\d+)/i);
-                    if (sMatch) {
-                        seasonNum = parseInt(sMatch[1], 10);
+            if (streamElements.length > 0) {
+                Array.from(streamElements).forEach((el) => {
+                    if (el.tagName && el.tagName.toUpperCase() === 'H2') {
+                        const sMatch = el.textContent.trim().match(/Saison\s+(\d+)/i);
+                        if (sMatch) currentSeason = parseInt(sMatch[1], 10);
+                        return;
                     }
                     
-                    let epName = titleText || `S${seasonNum} Épisode ${idx + 1}`;
-                    const episodeNumMatch = titleText.match(/Episode\s+(\d+)/i) || epName.match(/\d+/);
-                    const episodeNum = episodeNumMatch ? parseInt(episodeNumMatch[1] || episodeNumMatch[0], 10) : (idx + 1);
+                    const hrefText = el.getAttribute('href') || '';
+                    if (!hrefText || seenUrls.has(hrefText)) return;
+                    seenUrls.add(hrefText);
+
+                    const titleText = el.textContent.trim();
+                    let seasonNum = currentSeason;
+                    const fallbackSMatch = titleText.match(/Saison\s+(\d+)/i) || hrefText.match(/saison-(\d+)/i);
+                    if (fallbackSMatch) seasonNum = parseInt(fallbackSMatch[1], 10);
+                    
+                    let epName = titleText || `S${seasonNum} Épisode`;
+                    const episodeNumMatch = titleText.match(/Episode\s+(\d+)/i) || hrefText.match(/(?:ep|episode)-?(\d+)/i) || epName.match(/\d+/);
+                    const episodeNum = episodeNumMatch ? parseInt(episodeNumMatch[1] || episodeNumMatch[0], 10) : (episodes.length + 1);
                     
                     episodes.push({
                         season: seasonNum,
