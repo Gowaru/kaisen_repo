@@ -1,6 +1,6 @@
 (function() {
 
-        const axios = {
+    const axios = {
         get: async (url, config = {}) => {
             const h = config.headers || {};
             if (typeof http_get !== 'undefined') {
@@ -25,7 +25,7 @@
 
     
     const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://animevostfr.org';
-const headers = {
+    const headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
         'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -112,23 +112,36 @@ const headers = {
             const doc = await parseHtml(res.data);
 
             const title = doc.querySelector('h1.Title, .Title')?.textContent.trim() || '';
-            const description = doc.querySelector('.Description, .Synopsis, p')?.textContent.trim() || '';
+            const description = doc.querySelector('.Description p, .Synopsis p, .Description, .Synopsis, p')?.textContent.trim() || '';
             const posterUrl = doc.querySelector('.Image figure img, .poster img')?.getAttribute('src') || '';
+
+            let year = 0;
+            const yearStr = doc.querySelector('.Date, .Year')?.textContent;
+            if (yearStr) {
+                const yMatch = yearStr.match(/\d{4}/);
+                if (yMatch) year = parseInt(yMatch[0], 10);
+            }
+
+            let duration = 0;
+            const durationStr = doc.querySelector('.Time, .Duration')?.textContent;
+            if (durationStr) {
+                const dMatch = durationStr.match(/\d+/);
+                if (dMatch) duration = parseInt(dMatch[0], 10);
+            }
 
             const episodes = [];
             const epLinks = doc.querySelectorAll('.episode-link, .ep-list-all a, .episodes a');
             
             if (epLinks.length > 0) {
-                epLinks.forEach((link, idx) => {
-                    const epName = link.textContent.trim() || `Épisode ${epLinks.length - idx}`;
-                    const episodeNumMatch = epName.match(/\d+/);
-                    const episodeNum = episodeNumMatch ? parseInt(episodeNumMatch[0], 10) : 0;
+                Array.from(epLinks).reverse().forEach((link, idx) => {
+                    const epName = link.textContent.trim() || `Épisode ${idx + 1}`;
+                    const episodeNum = idx + 1;
                     
                     episodes.push(new Episode({
                         season: 1,
                         name: epName,
                         episode: episodeNum,
-                        url: link?.getAttribute('href'),
+                        url: link.getAttribute('href'),
                         playbackPolicy: 'none'
                     }));
                 });
@@ -140,6 +153,8 @@ const headers = {
                     title,
                     description,
                     posterUrl,
+                    year,
+                    duration,
                     episodes: episodes
                 }
             });
