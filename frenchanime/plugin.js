@@ -200,33 +200,38 @@
 
             const eps = [];
             
-            // First check if the page actually contains dual tracks (VF & VOSTFR buttons)
-            // Some entries mix it via 'Episode X VOSTFR' vs 'Episode X VF' or via tabs
-            // Let's modify the lineRegex to grab potential VF/VOSTFR indications from the lines if available, but fundamentally 
-            // french-anime structure is based on specific patterns.
-            
             const lineRegex = /(?:^|>|\n)\s*([0-9A-Za-z -]+)!\s*([^<\n\r]+)/gi;
             let lineMatch;
             const added = new Set();
             
-            // Check global title or URL for obvious dub status
-            const isGloballyVF = url.includes('-vf') || url.includes('-french') || url.includes('french') || html.toLowerCase().includes(' FRENCH');
-            const isGloballyVOSTFR = url.includes('-vostfr') || html.toLowerCase().includes(' VOSTFR');
+            // Check global title or URL for obvious dub status.
+            // Explicitly search itemprop="inLanguage" text and other metadata if needed.
+            const langMatch = html.match(/<span itemprop="inLanguage">([^<]+)\/span>/i);
+            const inLanguage = langMatch ? langMatch[1].toUpperCase() : "";
+            
+            let checkLanguage = inLanguage;
+            if(!checkLanguage) checkLanguage = (html.match(/<li[^>]*><div class="mov-label">Version:?<\/div> \s*<div class="mov-desc">(.*?)<\/div>/i) || [])[1] || "";
+            checkLanguage = checkLanguage.toUpperCase();
+
+            const isGloballyVOSTFR = url.includes('-vostfr') || title.toUpperCase().includes('VOSTFR') || checkLanguage.includes('VOSTFR');
+            const isGloballyVF = (!isGloballyVOSTFR && (url.includes('-vf') || url.includes('-french') || title.toUpperCase().includes('FRENCH') || title.toUpperCase().includes(' VF') || checkLanguage.includes('VF') || checkLanguage.includes('FRENCH')));
             
             while ((lineMatch = lineRegex.exec(html)) !== null) {
                 const epNameRaw = lineMatch[1].trim();
-                // Filter out lines that are too long to be legit episode identifiers
                 if(epNameRaw.length > 30 || added.has(epNameRaw)) continue; 
                 added.add(epNameRaw);
 
                 let epName = isNaN(parseInt(epNameRaw)) ? epNameRaw : `Episode ${epNameRaw}`;
-                
-                // Inspect the urls line to determine if it belongs to a specific language explicitly
                 const urlsLine = lineMatch[2].trim();
                 
-                let localDubStatus = (isGloballyVF && !isGloballyVOSTFR) ? 'dub' : 'sub';
-                if (url.includes('-vf-') || url.includes('-vf.') || url.includes('french') || epNameRaw.toLowerCase().includes('vf')) localDubStatus = 'dub';
-                if (epNameRaw.toLowerCase().includes('vostfr')) localDubStatus = 'sub';
+                let localDubStatus = isGloballyVOSTFR ? 'sub' : (isGloballyVF ? 'dub' : 'sub');
+                if (epNameRaw.toLowerCase().includes('vostfr')) {
+                    localDubStatus = 'sub';
+                    epName = epName.replace(/vostfr/ig, '').trim();
+                } else if (epNameRaw.toLowerCase().includes('vf')) {
+                    localDubStatus = 'dub';
+                    epName = epName.replace(/vf/ig, '').trim();
+                }
 
                 
                 // If the episode name has VF or VOSTFR explicitely, clean it and set correct dub
