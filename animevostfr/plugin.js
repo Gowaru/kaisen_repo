@@ -65,7 +65,7 @@
                         const linkEl = entry.querySelector('a');
 
                         if (tEl && linkEl) {
-                            items.push(new (typeof MultimediaItem !== 'undefined' ? MultimediaItem : Object)({
+                            items.push({
                                 title: tEl.textContent.trim().replace('Anime', '').trim(),
                                 url: linkEl.getAttribute('href'),
                                 posterUrl: imgEl ? imgEl.getAttribute('src') : '',
@@ -92,7 +92,7 @@
                     const linkEl = entry.querySelector('a');
 
                     if (titleEl && linkEl) {
-                        items.push(new (typeof MultimediaItem !== 'undefined' ? MultimediaItem : Object)({
+                        items.push({
                             title: titleEl.textContent.trim().replace('Anime', '').trim(),
                             url: linkEl.getAttribute('href'),
                             posterUrl: imgEl ? imgEl.getAttribute('src') : '',
@@ -154,7 +154,7 @@
                         const itemUrl = linkEl.getAttribute('href');
                         if (!seen.has(itemUrl)) {
                             seen.add(itemUrl);
-                            results.push(new (typeof MultimediaItem !== 'undefined' ? MultimediaItem : Object)({
+                            results.push({
                                 title: titleEl.textContent.trim().replace('Anime', '').trim(),
                                 url: itemUrl,
                                 posterUrl: imgEl ? imgEl.getAttribute('src') : '',
