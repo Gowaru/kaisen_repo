@@ -273,15 +273,29 @@
             const recommendations = [];
             const relatedMatch = html.match(/<a class="mov-t nowrap" href="([^"]+)">([^<]+)<\/a>/g);
             if (relatedMatch) {
+                function cleanTitleForMatch(t) {
+                    return t.toLowerCase().replace(/vostfr|vf|french|saison\s*\d+|season\s*\d+|\d+$/ig, '').replace(/[^a-z0-9]/g, '');
+                }
+                const base1 = cleanTitleForMatch(title);
+                const base2 = originalTitle ? cleanTitleForMatch(originalTitle) : base1;
+
                 relatedMatch.forEach(rm => {
                     const m = rm.match(/href="([^"]+)">([^<]+)</);
                     if (m && m[1] !== url && m[2] !== title) {
-                        recommendations.push(new MultimediaItem({
-                            title: m[2].trim(),
-                            url: m[1].startsWith('http') ? m[1] : baseUrl + m[1],
-                            posterUrl: posterUrl,
-                            type: "series"
-                        }));
+                        const recTitle = m[2].trim();
+                        const recBase = cleanTitleForMatch(recTitle);
+                        // Ensure we don't match empty strings if base is too short
+                        const isRelated = (base1.length > 2 && (recBase.includes(base1) || base1.includes(recBase))) || 
+                                          (base2.length > 2 && (recBase.includes(base2) || base2.includes(recBase)));
+                        
+                        if (isRelated) {
+                            recommendations.push(new MultimediaItem({
+                                title: recTitle,
+                                url: m[1].startsWith('http') ? m[1] : baseUrl + m[1],
+                                posterUrl: posterUrl,
+                                type: "series"
+                            }));
+                        }
                     }
                 });
             }
