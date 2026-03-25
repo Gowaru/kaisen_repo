@@ -72,7 +72,7 @@
                                 type: 'anime',
                                 status: 'ongoing',
                                 playbackPolicy: 'none'
-                            }));
+                            });
                         }
                     });
                     
@@ -99,7 +99,7 @@
                             type: 'anime',
                             status: 'ongoing',
                             playbackPolicy: 'none'
-                        }));
+                        });
                     }
                 });
                 if (items.length > 0) {
@@ -161,7 +161,7 @@
                                 type: 'anime',
                                 status: 'ongoing',
                                 playbackPolicy: 'none'
-                            }));
+                            });
                         }
                     }
                 });
@@ -216,7 +216,7 @@
                             const episodeNumMatch = epName.match(/Episode\s+(\d+)/i) || epName.match(/\d+/);
                             const episodeNum = episodeNumMatch ? parseInt(episodeNumMatch[1] || episodeNumMatch[0], 10) : (idx + 1);
                             
-                            episodes.push(new Episode({
+                            episodes.push({
                                 season: parsedSeason,
                                 name: epName,
                                 episode: episodeNum,
@@ -224,7 +224,7 @@
                                 posterUrl: posterUrl,
                                 dubStatus: link.getAttribute('href').includes('vostfr') ? 'sub' : (link.getAttribute('href').includes('vf') ? 'dub' : 'sub'),
                                 playbackPolicy: 'none'
-                            }));
+                            });
                         });
                     }
                 }
@@ -239,7 +239,7 @@
                         const episodeNumMatch = epName.match(/Episode\s+(\d+)/i) || epName.match(/\d+/);
                         const episodeNum = episodeNumMatch ? parseInt(episodeNumMatch[1] || episodeNumMatch[0], 10) : (idx + 1);
                         
-                        episodes.push(new Episode({
+                        episodes.push({
                             season: 1,
                             name: epName,
                             episode: episodeNum,
@@ -247,7 +247,7 @@
                             posterUrl: posterUrl,
                             dubStatus: link.getAttribute('href').includes('vostfr') ? 'sub' : (link.getAttribute('href').includes('vf') ? 'dub' : 'sub'),
                             playbackPolicy: 'none'
-                        }));
+                        });
                     });
                 }
             }
@@ -260,7 +260,7 @@
 
             cb({
                 success: true,
-                data: new (typeof MultimediaItem !== 'undefined' ? MultimediaItem : Object)({
+                data: {
                     title,
                     description,
                     posterUrl,
@@ -268,7 +268,7 @@
                     duration,
                     type: episodes.length > 1 ? "series" : "movie",
                     episodes: episodes
-                })
+                }
             });
         } catch (e) {
             console.error(e);
