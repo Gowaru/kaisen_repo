@@ -24,7 +24,7 @@
     };
 
     
-    function formatAnimeTitle(title, url = "") {
+    function formatAnimeTitle(title, url = "", posterUrl = "") {
         let t = title.replace(/wiflix/gi, '').trim();
         let tags = [];
         
@@ -51,16 +51,33 @@
             t = t.replace(/\b(vf|french)\b/ig, '').trim();
         }
 
+        if (!isVF && !isVOSTFR && posterUrl) {
+            if (posterUrl.toLowerCase().includes('vostfr')) isVOSTFR = true;
+            else if (posterUrl.toLowerCase().includes('vf')) isVF = true;
+        }
+
         if (!isVF && !isVOSTFR) {
             if (url.includes('/animes-vostfr/')) isVOSTFR = true;
             else if (url.includes('/animes-vf/')) isVF = true;
-            else if (!url.includes('vf-vostfr') && !url.includes('vostfr-vf')) {
+            else if (url.includes('vf-vostfr') || url.includes('vostfr-vf')) {
+                isVOSTFR = true;
+                isVF = true;
+            } else {
                 if (url.includes('-vostfr')) isVOSTFR = true;
                 else if (url.includes('-vf') || url.includes('-french')) isVF = true;
             }
         }
 
-        if (isVOSTFR) tags.push('VOSTFR');
+        if (!isVF && !isVOSTFR) {
+            if (url.includes('/exclue/')) isVOSTFR = true;
+            else if (url.includes('/films-vf-vostfr/')) {
+                isVF = true;
+                isVOSTFR = true;
+            }
+        }
+
+        if (isVOSTFR && isVF) tags.push('MULTI');
+        else if (isVOSTFR) tags.push('VOSTFR');
         else if (isVF) tags.push('VF');
 
         t = t.replace(/^[-\s]+|[-\s]+$/g, '').replace(/[\s\-:\.]+$/, '').replace(/^\s+/, '').replace(/\s{2,}/g, ' ').trim();
@@ -72,54 +89,7 @@
     }
 
     
-    function formatAnimeTitle(title, url = "") {
-        let t = title.replace(/wiflix/gi, '').trim();
-        let tags = [];
-        
-        let seasonMatch = t.match(/\b(?:saison|season)\s*(\d+)/i);
-        if (seasonMatch) {
-            tags.push(`S${seasonMatch[1]}`);
-            t = t.replace(/\b(?:saison|season)\s*(\d+)/ig, '').trim();
-        } else {
-            seasonMatch = url.match(/(?:saison|season)[\-\s]*(\d+)/i);
-            if (seasonMatch) {
-                tags.push(`S${seasonMatch[1]}`);
-            }
-        }
-
-        let isVOSTFR = false;
-        let isVF = false;
-
-        if (/\b(vostfr|sub)\b/i.test(t)) {
-            isVOSTFR = true;
-            t = t.replace(/\b(vostfr|sub)\b/ig, '').trim();
-        }
-        if (/\b(vf|french)\b/i.test(t)) {
-            isVF = true;
-            t = t.replace(/\b(vf|french)\b/ig, '').trim();
-        }
-
-        if (!isVF && !isVOSTFR) {
-            if (url.includes('/animes-vostfr/')) isVOSTFR = true;
-            else if (url.includes('/animes-vf/')) isVF = true;
-            else if (!url.includes('vf-vostfr') && !url.includes('vostfr-vf')) {
-                if (url.includes('-vostfr')) isVOSTFR = true;
-                else if (url.includes('-vf') || url.includes('-french')) isVF = true;
-            }
-        }
-
-        if (isVOSTFR) tags.push('VOSTFR');
-        else if (isVF) tags.push('VF');
-
-        t = t.replace(/^[-\s]+|[-\s]+$/g, '').replace(/[\s\-:\.]+$/, '').replace(/^\s+/, '').replace(/\s{2,}/g, ' ').trim();
-        
-        if (tags.length > 0) {
-            return `${t} [${tags.join('] [')}]`;
-        }
-        return t;
-    }
-
-    async function getHome(cb) {
+        async function getHome(cb) {
         try {
             const { data: html } = await axios.get(baseUrl);
             if (typeof parseHtml === 'undefined') throw new Error("parseHtml missing");
@@ -140,7 +110,7 @@
                 let protocolMatch = posterUrl.match(/^(\/\/[^\/]+)/);
                 if (protocolMatch) posterUrl = "https:" + posterUrl;
                 else if (posterUrl && !posterUrl.startsWith('http')) posterUrl = baseUrl.replace(/\/$/, '') + (posterUrl.startsWith('/') ? '' : '/') + posterUrl;
-                return new MultimediaItem({ title: formatAnimeTitle(title, url), url: url.startsWith('http') ? url : baseUrl+url, posterUrl, type: "anime" });
+                return new MultimediaItem({ title: formatAnimeTitle(title, url, posterUrl), url: url.startsWith('http') ? url : baseUrl+url, posterUrl, type: "anime" });
             }
 
             const mainMovs = Array.from(doc.querySelectorAll('.mov')).slice(0, 20);
@@ -152,7 +122,7 @@
                 const dt = parseItem(item);
                 if(!dt) return null;
                 const innerT = item.querySelector('.mov-side-title');
-                if(innerT) dt.title = formatAnimeTitle(innerT.textContent.replace(/wiflix/gi, '').trim(), dt.url);
+                if(innerT) dt.title = formatAnimeTitle(innerT.textContent.replace(/wiflix/gi, '').trim(), dt.url, dt.posterUrl);
                 return dt;
             }).filter(Boolean);
             if(sideItems.length > 0) results["Populaires / Tendances"] = sideItems;
@@ -237,7 +207,7 @@
                     else if (poster && !poster.startsWith('http')) poster = baseUrl.replace(/\/$/, '') + (poster.startsWith('/') ? '' : '/') + poster;
 
                     results.push(new MultimediaItem({
-                        title: formatAnimeTitle(title, url), url: url.startsWith('http') ? url : baseUrl + url, posterUrl: poster, type: "anime"
+                        title: formatAnimeTitle(title, url, poster), url: url.startsWith('http') ? url : baseUrl + url, posterUrl: poster, type: "anime"
                     }));
                 }
             }
@@ -386,7 +356,7 @@
                         
                         if (isRelated) {
                             recommendations.push(new MultimediaItem({
-                                title: formatAnimeTitle(recTitle, m[1]),
+                                title: formatAnimeTitle(recTitle, m[1], posterUrl),
                                 url: m[1].startsWith('http') ? m[1] : baseUrl + m[1],
                                 posterUrl: posterUrl,
                                 type: "series"
@@ -425,7 +395,7 @@
             cb({ 
                 success: true, 
                 data: new MultimediaItem({
-                    title: formatAnimeTitle(title, url), url: url, posterUrl: posterUrl,
+                    title: formatAnimeTitle(title, url, posterUrl), url: url, posterUrl: posterUrl,
                     type: eps.length > 1 ? "series" : "movie",
                     description: description, year: parseInt(year) || null,
                     episodes: eps,
