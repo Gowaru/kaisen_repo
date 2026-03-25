@@ -198,58 +198,33 @@
             }
 
             const episodes = [];
-            const seasonBlocks = doc.querySelectorAll('h2');
-            let blocksFound = false;
-
-            seasonBlocks.forEach((h2) => {
-                const text = h2.textContent.trim();
-                const seasonMatch = text.match(/Saison\s+(\d+)/i);
-                if (seasonMatch) {
-                    blocksFound = true;
-                    const parsedSeason = parseInt(seasonMatch[1], 10);
-                    const parent = h2.parentElement || h2.parentNode;
-                    const epLinks = parent ? parent.querySelectorAll('.episode-link, .ep-list-all a, .episodes a') : [];
+            const epLinks = doc.querySelectorAll('.episode-link, .ep-list-all a, .episodes a');
+            
+            if (epLinks.length > 0) {
+                Array.from(epLinks).reverse().forEach((link, idx) => {
+                    const titleText = link.textContent.trim();
+                    const hrefText = link.getAttribute('href') || '';
                     
-                    if (epLinks.length > 0) {
-                        Array.from(epLinks).reverse().forEach((link, idx) => {
-                            const epName = link.textContent.trim() || `S${parsedSeason} Épisode ${idx + 1}`;
-                            const episodeNumMatch = epName.match(/Episode\s+(\d+)/i) || epName.match(/\d+/);
-                            const episodeNum = episodeNumMatch ? parseInt(episodeNumMatch[1] || episodeNumMatch[0], 10) : (idx + 1);
-                            
-                            episodes.push({
-                                season: parsedSeason,
-                                name: epName,
-                                episode: episodeNum,
-                                url: link.getAttribute('href'),
-                                posterUrl: posterUrl,
-                                dubStatus: link.getAttribute('href').includes('vostfr') ? 'sub' : (link.getAttribute('href').includes('vf') ? 'dub' : 'sub'),
-                                playbackPolicy: 'none'
-                            });
-                        });
+                    let seasonNum = 1;
+                    const sMatch = titleText.match(/Saison\s+(\d+)/i) || hrefText.match(/saison-(\d+)/i);
+                    if (sMatch) {
+                        seasonNum = parseInt(sMatch[1], 10);
                     }
-                }
-            });
-
-            // Fallback for single season / older structure
-            if (!blocksFound) {
-                const epLinks = doc.querySelectorAll('.episode-link, .ep-list-all a, .episodes a');
-                if (epLinks.length > 0) {
-                    Array.from(epLinks).reverse().forEach((link, idx) => {
-                        const epName = link.textContent.trim() || `Épisode ${idx + 1}`;
-                        const episodeNumMatch = epName.match(/Episode\s+(\d+)/i) || epName.match(/\d+/);
-                        const episodeNum = episodeNumMatch ? parseInt(episodeNumMatch[1] || episodeNumMatch[0], 10) : (idx + 1);
-                        
-                        episodes.push({
-                            season: 1,
-                            name: epName,
-                            episode: episodeNum,
-                            url: link.getAttribute('href'),
-                            posterUrl: posterUrl,
-                            dubStatus: link.getAttribute('href').includes('vostfr') ? 'sub' : (link.getAttribute('href').includes('vf') ? 'dub' : 'sub'),
-                            playbackPolicy: 'none'
-                        });
+                    
+                    let epName = titleText || `S${seasonNum} Épisode ${idx + 1}`;
+                    const episodeNumMatch = titleText.match(/Episode\s+(\d+)/i) || epName.match(/\d+/);
+                    const episodeNum = episodeNumMatch ? parseInt(episodeNumMatch[1] || episodeNumMatch[0], 10) : (idx + 1);
+                    
+                    episodes.push({
+                        season: seasonNum,
+                        name: epName,
+                        episode: episodeNum,
+                        url: hrefText,
+                        posterUrl: posterUrl,
+                        dubStatus: hrefText.includes('vostfr') ? 'sub' : (hrefText.includes('vf') ? 'dub' : 'sub'),
+                        playbackPolicy: 'none'
                     });
-                }
+                });
             }
 
             // Sort episodes correctly: first by season ascending, then by episode ascending
