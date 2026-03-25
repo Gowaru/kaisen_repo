@@ -269,14 +269,14 @@
                 eps.push(new Episode({ name: "Film / Unique", episode: 1, posterUrl: posterUrl, url: "[]", season: seasonNumber, dubStatus: url.includes('-vf-') || url.includes('-vf.') ? 'dub' : 'sub' }));
             }
             
-            // Collect related sync series (other seasons/films linked on the same page)
-            const syncData = { recommendations: [] };
+            // Collect related series/recommendations (other seasons/films linked on the same page)
+            const recommendations = [];
             const relatedMatch = html.match(/<a class="mov-t nowrap" href="([^"]+)">([^<]+)<\/a>/g);
             if (relatedMatch) {
                 relatedMatch.forEach(rm => {
                     const m = rm.match(/href="([^"]+)">([^<]+)</);
                     if (m && m[1] !== url && m[2] !== title) {
-                        syncData.recommendations.push(new MultimediaItem({
+                        recommendations.push(new MultimediaItem({
                             title: m[2].trim(),
                             url: m[1].startsWith('http') ? m[1] : baseUrl + m[1],
                             posterUrl: posterUrl,
@@ -293,7 +293,7 @@
                     type: eps.length > 1 ? "series" : "movie",
                     description: description, year: parseInt(year) || null,
                     episodes: eps,
-                    syncData: Object.keys(syncData).length > 0 ? syncData : undefined
+                    recommendations: recommendations.length > 0 ? recommendations : undefined
                 })
             });
         } catch (e) { cb({ success: false, errorCode: "LOAD_ERROR", message: String(e) }); }
