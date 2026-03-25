@@ -46,28 +46,64 @@
             const url = baseUrl;
             const res = await axios.get(url, { headers });
             const doc = await parseHtml(res.data);
-            const items = [];
+            const data = {};
 
-            // Targeted selectors for AnimeVOSTFR
-            const entries = doc.querySelectorAll('article.TPost');
-            entries.forEach(entry => {
-                const titleEl = entry.querySelector('h3.Title, .Title');
-                const imgEl = entry.querySelector('img');
-                const linkEl = entry.querySelector('a');
+            // Parse sections like "Derniers Animes", "Derniers Films", etc.
+            const tops = doc.querySelectorAll('.Top');
+            tops.forEach(top => {
+                const sectionTitle = top.querySelector('h2.Title')?.textContent.trim();
+                const movieList = top.nextElementSibling;
+                if (sectionTitle && movieList && movieList.classList.contains('MovieList')) {
+                    const items = [];
+                    const entries = movieList.querySelectorAll('article.TPost');
+                    entries.forEach(entry => {
+                        const titleEl = entry.querySelector('h3.Title, .Title');
+                        const imgEl = entry.querySelector('img');
+                        const linkEl = entry.querySelector('a');
 
-                if (titleEl && linkEl) {
-                    items.push({
-                        title: titleEl.textContent.trim().replace('Anime', '').trim().toLowerCase(),
-                        url: linkEl?.getAttribute('href'),
-                        posterUrl: imgEl ? imgEl?.getAttribute('src') : '',
-                        type: 'anime',
-                        status: 'ongoing',
-                        playbackPolicy: 'none'
+                        if (titleEl && linkEl) {
+                            items.push({
+                                title: titleEl.textContent.trim().replace('Anime', '').trim().toLowerCase(),
+                                url: linkEl?.getAttribute('href'),
+                                posterUrl: imgEl ? imgEl?.getAttribute('src') : '',
+                                type: 'anime',
+                                status: 'ongoing',
+                                playbackPolicy: 'none'
+                            });
+                        }
                     });
+                    if (items.length > 0) {
+                        data[sectionTitle] = items;
+                    }
                 }
             });
 
-            cb({ success: true, data: { "Derniers Ajouts": items } });
+            // Fallback if structure changes
+            if (Object.keys(data).length === 0) {
+                const items = [];
+                const entries = doc.querySelectorAll('article.TPost');
+                entries.forEach(entry => {
+                    const titleEl = entry.querySelector('h3.Title, .Title');
+                    const imgEl = entry.querySelector('img');
+                    const linkEl = entry.querySelector('a');
+
+                    if (titleEl && linkEl) {
+                        items.push({
+                            title: titleEl.textContent.trim().replace('Anime', '').trim().toLowerCase(),
+                            url: linkEl?.getAttribute('href'),
+                            posterUrl: imgEl ? imgEl?.getAttribute('src') : '',
+                            type: 'anime',
+                            status: 'ongoing',
+                            playbackPolicy: 'none'
+                        });
+                    }
+                });
+                if (items.length > 0) {
+                    data["Derniers Ajouts"] = items;
+                }
+            }
+
+            cb({ success: true, data: data });
         } catch (e) {
             console.error(e);
             cb({ success: false, errorCode: "HOME_ERROR", message: e.stack });
@@ -130,22 +166,61 @@
             }
 
             const episodes = [];
-            const epLinks = doc.querySelectorAll('.episode-link, .ep-list-all a, .episodes a');
-            
-            if (epLinks.length > 0) {
-                Array.from(epLinks).reverse().forEach((link, idx) => {
-                    const epName = link.textContent.trim() || `Épisode ${idx + 1}`;
-                    const episodeNum = idx + 1;
+            const seasonBlocks = doc.querySelectorAll('h2');
+            let blocksFound = false;
+
+            seasonBlocks.forEach((h2) => {
+                const text = h2.textContent.trim();
+                const seasonMatch = text.match(/Saison\s+(\d+)/i);
+                if (seasonMatch) {
+                    blocksFound = true;
+                    const parsedSeason = parseInt(seasonMatch[1], 10);
+                    const parent = h2.parentElement;
+                    const epLinks = parent ? parent.querySelectorAll('.episode-link, .ep-list-all a, .episodes a') : [];
                     
-                    episodes.push(new Episode({
-                        season: 1,
-                        name: epName,
-                        episode: episodeNum,
-                        url: link.getAttribute('href'),
-                        playbackPolicy: 'none'
-                    }));
-                });
+                    if (epLinks.length > 0) {
+                        Array.from(epLinks).reverse().forEach((link, idx) => {
+                            const epName = link.textContent.trim() || `S${parsedSeason} Épisode ${idx + 1}`;
+                            const episodeNumMatch = epName.match(/Episode\s+(\d+)/i) || epName.match(/\d+/);
+                            const episodeNum = episodeNumMatch ? parseInt(episodeNumMatch[1] || episodeNumMatch[0], 10) : (idx + 1);
+                            
+                            episodes.push(new Episode({
+                                season: parsedSeason,
+                                name: epName,
+                                episode: episodeNum,
+                                url: link.getAttribute('href'),
+                                playbackPolicy: 'none'
+                            }));
+                        });
+                    }
+                }
+            });
+
+            // Fallback for single season / older structure
+            if (!blocksFound) {
+                const epLinks = doc.querySelectorAll('.episode-link, .ep-list-all a, .episodes a');
+                if (epLinks.length > 0) {
+                    Array.from(epLinks).reverse().forEach((link, idx) => {
+                        const epName = link.textContent.trim() || `Épisode ${idx + 1}`;
+                        const episodeNumMatch = epName.match(/Episode\s+(\d+)/i) || epName.match(/\d+/);
+                        const episodeNum = episodeNumMatch ? parseInt(episodeNumMatch[1] || episodeNumMatch[0], 10) : (idx + 1);
+                        
+                        episodes.push(new Episode({
+                            season: 1,
+                            name: epName,
+                            episode: episodeNum,
+                            url: link.getAttribute('href'),
+                            playbackPolicy: 'none'
+                        }));
+                    });
+                }
             }
+
+            // Sort episodes correctly: first by season ascending, then by episode ascending
+            episodes.sort((a, b) => {
+                if (a.season !== b.season) return a.season - b.season;
+                return a.episode - b.episode;
+            });
 
             cb({
                 success: true,
