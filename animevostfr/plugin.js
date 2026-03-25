@@ -49,32 +49,61 @@
             const data = {};
 
             // Parse sections like "Derniers Animes", "Derniers Films", etc.
-            const tops = doc.querySelectorAll('.Top');
-            tops.forEach(top => {
-                const sectionTitle = top.querySelector('h2.Title')?.textContent.trim();
-                const movieList = top.nextElementSibling;
-                if (sectionTitle && movieList && movieList.classList.contains('MovieList')) {
-                    const items = [];
-                    const entries = movieList.querySelectorAll('article.TPost');
-                    entries.forEach(entry => {
-                        const titleEl = entry.querySelector('h3.Title, .Title');
-                        const imgEl = entry.querySelector('img');
-                        const linkEl = entry.querySelector('a');
-
-                        if (titleEl && linkEl) {
-                            items.push({
-                                title: titleEl.textContent.trim().replace('Anime', '').trim().toLowerCase(),
-                                url: linkEl?.getAttribute('href'),
-                                posterUrl: imgEl ? imgEl?.getAttribute('src') : '',
-                                type: 'anime',
-                                status: 'ongoing',
-                                playbackPolicy: 'none'
-                            });
-                        }
-                    });
-                    if (items.length > 0) {
-                        data[sectionTitle] = items;
+            const lists = doc.querySelectorAll('ul.MovieList');
+            lists.forEach(list => {
+                let sectionTitle = null;
+                let current = list.previousElementSibling;
+                while (current) {
+                    if (current.tagName && current.tagName.match(/^H[1-6]/) && current.classList.contains('Title')) {
+                        sectionTitle = current.textContent.trim();
+                        break;
                     }
+                    const headerInside = current.querySelector ? current.querySelector('.Title') : null;
+                    if (headerInside) {
+                        sectionTitle = headerInside.textContent.trim();
+                        break;
+                    }
+                    current = current.previousElementSibling;
+                }
+                
+                if (!sectionTitle && list.parentElement) {
+                    current = list.parentElement.previousElementSibling;
+                    while (current) {
+                        if (current.tagName && current.tagName.match(/^H[1-6]/) && current.classList.contains('Title')) {
+                            sectionTitle = current.textContent.trim();
+                            break;
+                        }
+                        const headerInside = current.querySelector ? current.querySelector('.Title') : null;
+                        if (headerInside) {
+                            sectionTitle = headerInside.textContent.trim();
+                            break;
+                        }
+                        current = current.previousElementSibling;
+                    }
+                }
+                
+                if (!sectionTitle) sectionTitle = "Sélection " + (Object.keys(data).length + 1);
+
+                const items = [];
+                const entries = list.querySelectorAll('.TPost');
+                entries.forEach(entry => {
+                    const titleEl = entry.querySelector('.Title, .Title');
+                    const imgEl = entry.querySelector('img');
+                    const linkEl = entry.querySelector('a');
+
+                    if (titleEl && linkEl) {
+                        items.push(new (typeof MultimediaItem !== 'undefined' ? MultimediaItem : Object)({
+                            title: titleEl.textContent.trim().replace('Anime', '').trim(),
+                            url: linkEl.getAttribute('href'),
+                            posterUrl: imgEl ? imgEl.getAttribute('src') : '',
+                            type: 'anime',
+                            status: 'ongoing',
+                            playbackPolicy: 'none'
+                        }));
+                    }
+                });
+                if (items.length > 0) {
+                    data[sectionTitle] = items;
                 }
             });
 
@@ -88,14 +117,14 @@
                     const linkEl = entry.querySelector('a');
 
                     if (titleEl && linkEl) {
-                        items.push({
-                            title: titleEl.textContent.trim().replace('Anime', '').trim().toLowerCase(),
-                            url: linkEl?.getAttribute('href'),
-                            posterUrl: imgEl ? imgEl?.getAttribute('src') : '',
+                        items.push(new (typeof MultimediaItem !== 'undefined' ? MultimediaItem : Object)({
+                            title: titleEl.textContent.trim().replace('Anime', '').trim(),
+                            url: linkEl.getAttribute('href'),
+                            posterUrl: imgEl ? imgEl.getAttribute('src') : '',
                             type: 'anime',
                             status: 'ongoing',
                             playbackPolicy: 'none'
-                        });
+                        }));
                     }
                 });
                 if (items.length > 0) {
@@ -124,14 +153,14 @@
                 const linkEl = entry.querySelector('a');
 
                 if (titleEl && linkEl) {
-                    items.push({
-                        title: titleEl.textContent.trim().replace('Anime', '').trim().toLowerCase(),
-                        url: linkEl?.getAttribute('href'),
-                        posterUrl: imgEl ? imgEl?.getAttribute('src') : '',
+                    items.push(new (typeof MultimediaItem !== 'undefined' ? MultimediaItem : Object)({
+                        title: titleEl.textContent.trim().replace('Anime', '').trim(),
+                        url: linkEl.getAttribute('href'),
+                        posterUrl: imgEl ? imgEl.getAttribute('src') : '',
                         type: 'anime',
                         status: 'ongoing',
                         playbackPolicy: 'none'
-                    });
+                    }));
                 }
             });
 
@@ -224,14 +253,15 @@
 
             cb({
                 success: true,
-                data: {
+                data: new (typeof MultimediaItem !== 'undefined' ? MultimediaItem : Object)({
                     title,
                     description,
                     posterUrl,
                     year,
                     duration,
+                    type: "anime",
                     episodes: episodes
-                }
+                })
             });
         } catch (e) {
             console.error(e);
