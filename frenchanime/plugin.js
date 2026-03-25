@@ -300,6 +300,32 @@
                 });
             }
 
+            let finalRecommendations = [];
+            if (recommendations.length > 0) {
+                // Fetch valid posters for a limited number of related seasons (max 5) to avoid excessive requests
+                finalRecommendations = await Promise.all(recommendations.slice(0, 5).map(async (rec) => {
+                    try {
+                        const recRes = await axios.get(rec.url, { headers: { 'Referer': baseUrl, 'User-Agent': 'Mozilla/5.0' } });
+                        // Extract exact poster for the recommended series
+                        let recImgMatch = recRes.data.match(/<img[^>]+id="posterimg"[^>]+src="([^"]+)"/i) 
+                             || recRes.data.match(/<img[^>]+itemprop="image"[^>]+src="([^"]+)"/i)
+                             || recRes.data.match(/<div class="mov-i img-box">\s*<img src="([^"]+)"/i);
+                             
+                        if (recImgMatch) {
+                            let extractedPoster = recImgMatch[1].trim();
+                            if(!extractedPoster.includes('[xfvalue_img]')) {
+                                if (extractedPoster.startsWith('//')) extractedPoster = "https:" + extractedPoster;
+                                else if (!extractedPoster.startsWith('http')) extractedPoster = baseUrl.replace(/\/$/, '') + (extractedPoster.startsWith('/') ? '' : '/') + extractedPoster;
+                                rec.posterUrl = extractedPoster;
+                            }
+                        }
+                    } catch(err) {
+                        // Keep the default fallback poster on error
+                    }
+                    return rec;
+                }));
+            }
+
             cb({ 
                 success: true, 
                 data: new MultimediaItem({
@@ -307,7 +333,7 @@
                     type: eps.length > 1 ? "series" : "movie",
                     description: description, year: parseInt(year) || null,
                     episodes: eps,
-                    recommendations: recommendations.length > 0 ? recommendations : undefined
+                    recommendations: finalRecommendations.length > 0 ? finalRecommendations : undefined
                 })
             });
         } catch (e) { cb({ success: false, errorCode: "LOAD_ERROR", message: String(e) }); }
