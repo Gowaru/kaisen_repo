@@ -104,6 +104,7 @@
     async function search(query, cb) {
         try {
             let queries = [query];
+            
             const alt = await getAltTitles(query);
             queries = [...new Set([...queries, ...alt])];
             
@@ -111,7 +112,9 @@
             const seen = new Set();
 
             for (let q of queries) {
-                const params = `do=search&subaction=search&story=${encodeURIComponent(q)}`;
+                // Ensure query is correctly formatted for DLE search which uses + for spaces
+                let searchStr = q.trim();
+                const params = `do=search&subaction=search&story=${encodeURIComponent(searchStr)}`;
                 const response = await axios.post(`${baseUrl}/index.php?do=search`, params, {
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Referer': baseUrl }
                 });
@@ -196,17 +199,45 @@
             }
 
             const eps = [];
+            
+            // First check if the page actually contains dual tracks (VF & VOSTFR buttons)
+            // Some entries mix it via 'Episode X VOSTFR' vs 'Episode X VF' or via tabs
+            // Let's modify the lineRegex to grab potential VF/VOSTFR indications from the lines if available, but fundamentally 
+            // french-anime structure is based on specific patterns.
+            
             const lineRegex = /(?:^|>|\n)\s*([0-9A-Za-z -]+)!\s*([^<\n\r]+)/gi;
             let lineMatch;
             const added = new Set();
             
+            // Check global title or URL for obvious dub status
+            const isGloballyVF = url.includes('-vf') || url.includes('-french') || url.includes('french') || html.toLowerCase().includes(' FRENCH');
+            const isGloballyVOSTFR = url.includes('-vostfr') || html.toLowerCase().includes(' VOSTFR');
+            
             while ((lineMatch = lineRegex.exec(html)) !== null) {
                 const epNameRaw = lineMatch[1].trim();
-                if(epNameRaw.length > 10 || added.has(epNameRaw)) continue; 
+                // Filter out lines that are too long to be legit episode identifiers
+                if(epNameRaw.length > 30 || added.has(epNameRaw)) continue; 
                 added.add(epNameRaw);
 
-                const epName = isNaN(parseInt(epNameRaw)) ? epNameRaw : `Episode ${epNameRaw}`;
+                let epName = isNaN(parseInt(epNameRaw)) ? epNameRaw : `Episode ${epNameRaw}`;
+                
+                // Inspect the urls line to determine if it belongs to a specific language explicitly
                 const urlsLine = lineMatch[2].trim();
+                
+                let localDubStatus = (isGloballyVF && !isGloballyVOSTFR) ? 'dub' : 'sub';
+                if (url.includes('-vf-') || url.includes('-vf.') || url.includes('french') || epNameRaw.toLowerCase().includes('vf')) localDubStatus = 'dub';
+                if (epNameRaw.toLowerCase().includes('vostfr')) localDubStatus = 'sub';
+
+                
+                // If the episode name has VF or VOSTFR explicitely, clean it and set correct dub
+                if (epName.toLowerCase().includes('vostfr')) {
+                    localDubStatus = 'sub';
+                    epName = epName.replace(/vostfr/ig, '').trim();
+                } else if (epName.toLowerCase().includes('vf')) {
+                    localDubStatus = 'dub';
+                    epName = epName.replace(/vf/ig, '').trim();
+                }
+
                 const urls = urlsLine.split(',').map(u => u.trim()).filter(u => u.length > 5);
                 const formattedUrls = urls.map(u => u.startsWith('//') ? 'https:' + u : u);
                 
@@ -216,7 +247,8 @@
                     posterUrl: posterUrl,
                     url: JSON.stringify(formattedUrls),
                     season: 1,
-                    dubStatus: url.includes('-vf-') || url.includes('-vf.') ? 'dub' : 'sub'
+                    dubStatus: localDubStatus,
+                    description: localDubStatus === 'dub' ? 'Version Française (VF)' : 'Version Originale Sous-Titrée (VOSTFR)'
                 }));
             }
             
