@@ -95,14 +95,22 @@
                         const imgEl = article.querySelector('img');
                         const linkEl = article.querySelector('a');
 
-                        if (tEl && linkEl) {
+                        if (imgEl && linkEl) {
+                            let itemTitle = tEl ? tEl.textContent.trim() : '';
+                            if (!itemTitle) itemTitle = imgEl.getAttribute('title') || imgEl.getAttribute('alt') || '';
+                            itemTitle = itemTitle.replace(/Voir Anime|Anime/i, '').trim() || 'Inconnu';
+                            
                             const itemUrl = linkEl.getAttribute('href');
-                            if (!usedIds.has(itemUrl)) {
+                            let pUrl = imgEl.getAttribute('data-src') || imgEl.getAttribute('data-lazy-src') || imgEl.getAttribute('src') || '';
+                            if (pUrl.startsWith('//')) pUrl = 'https:' + pUrl;
+                            else if (pUrl.startsWith('/')) pUrl = baseUrl + pUrl;
+
+                            if (itemUrl && !usedIds.has(itemUrl) && !itemUrl.includes('void')) {
                                 usedIds.add(itemUrl);
                                 items.push({
-                                    title: tEl.textContent.trim().replace('Anime', '').trim(),
+                                    title: itemTitle,
                                     url: itemUrl,
-                                    posterUrl: imgEl ? (imgEl.getAttribute('data-src') || imgEl.getAttribute('data-lazy-src') || imgEl.getAttribute('src') || '') : '',
+                                    posterUrl: pUrl,
                                     type: 'anime',
                                     status: 'ongoing',
                                     playbackPolicy: 'none'
@@ -129,16 +137,26 @@
                     const imgEl = article.querySelector('img');
                     const linkEl = article.querySelector('a');
 
-                    if (titleEl && linkEl) {
+                    if (imgEl && linkEl) {
+                        let itemTitle = titleEl ? titleEl.textContent.trim() : '';
+                        if (!itemTitle) itemTitle = imgEl.getAttribute('title') || imgEl.getAttribute('alt') || '';
+                        itemTitle = itemTitle.replace(/Voir Anime|Anime/i, '').trim() || 'Inconnu';
+                        
                         const itemUrl = linkEl.getAttribute('href');
-                        items.push({
-                            title: titleEl.textContent.trim(),
-                            url: itemUrl,
-                            posterUrl: imgEl ? (imgEl.getAttribute('data-src') || imgEl.getAttribute('data-lazy-src') || imgEl.getAttribute('src') || '') : '',
-                            type: 'anime',
-                            status: 'ongoing',
-                            playbackPolicy: 'none'
-                        });
+                        let pUrl = imgEl.getAttribute('data-src') || imgEl.getAttribute('data-lazy-src') || imgEl.getAttribute('src') || '';
+                        if (pUrl.startsWith('//')) pUrl = 'https:' + pUrl;
+                        else if (pUrl.startsWith('/')) pUrl = baseUrl + pUrl;
+
+                        if (itemUrl && !itemUrl.includes('void')) {
+                            items.push({
+                                title: itemTitle,
+                                url: itemUrl,
+                                posterUrl: pUrl,
+                                type: 'anime',
+                                status: 'ongoing',
+                                playbackPolicy: 'none'
+                            });
+                        }
                     }
                 });
                 if (items.length > 0) {
@@ -199,14 +217,22 @@
                     const imgEl = article.querySelector('img');
                     const linkEl = article.querySelector('a');
 
-                    if (titleEl && linkEl) {
+                    if (imgEl && linkEl) {
+                        let itemTitle = titleEl ? titleEl.textContent.trim() : '';
+                        if (!itemTitle) itemTitle = imgEl.getAttribute('title') || imgEl.getAttribute('alt') || '';
+                        itemTitle = itemTitle.replace(/Voir Anime|Anime/i, '').trim() || 'Inconnu';
+                        
                         const itemUrl = linkEl.getAttribute('href');
-                        if (!seen.has(itemUrl)) {
+                        let pUrl = imgEl.getAttribute('data-src') || imgEl.getAttribute('data-lazy-src') || imgEl.getAttribute('src') || '';
+                        if (pUrl.startsWith('//')) pUrl = 'https:' + pUrl;
+                        else if (pUrl.startsWith('/')) pUrl = baseUrl + pUrl;
+
+                        if (itemUrl && !seen.has(itemUrl) && !itemUrl.includes('void')) {
                             seen.add(itemUrl);
                             results.push({
-                                title: titleEl.textContent.trim().replace('Anime', '').trim(),
+                                title: itemTitle,
                                 url: itemUrl,
-                                posterUrl: imgEl ? (imgEl.getAttribute('data-src') || imgEl.getAttribute('data-lazy-src') || imgEl.getAttribute('src') || '') : '',
+                                posterUrl: pUrl,
                                 type: 'anime',
                                 status: 'ongoing',
                                 playbackPolicy: 'none'
@@ -228,10 +254,15 @@
             const res = await axios.get(url, { headers });
             const doc = await parseHtml(res.data);
 
-            const title = doc.querySelector('.entry-title, h1, .name, .tt, .post-title h1')?.textContent.trim() || '';
+            let title = doc.querySelector('.entry-title, h1, .name, .tt, .post-title h1, .post-title')?.textContent.trim() || '';
             const description = doc.querySelector('.entry-content p, .desc, .synopsis, .summary__content p')?.textContent.trim() || '';
             const imgEl = doc.querySelector('.post-thumbnail img, .thumb img, .poster img, .sheader img, .summary_image img');
-            const posterUrl = imgEl ? (imgEl.getAttribute('data-src') || imgEl.getAttribute('data-lazy-src') || imgEl.getAttribute('src') || '') : '';
+            let posterUrl = imgEl ? (imgEl.getAttribute('data-src') || imgEl.getAttribute('data-lazy-src') || imgEl.getAttribute('src') || '') : '';
+            if (posterUrl.startsWith('//')) posterUrl = 'https:' + posterUrl;
+            else if (posterUrl.startsWith('/')) posterUrl = baseUrl + posterUrl;
+            
+            if (!title && imgEl) title = imgEl.getAttribute('title') || imgEl.getAttribute('alt') || 'Inconnu';
+            title = title.replace(/Voir Anime|Anime/i, '').trim();
 
             let year = 0;
             const yearMatch = res.data.match(/>(\d{4})<\/a>/);
@@ -247,20 +278,33 @@
             }
 
             const episodes = [];
+            // Many Madara themes hide true links in .wp-manga-chapter a
             const epLinks = doc.querySelectorAll('.episodes-list a, .eplist a, a[href*="/episode/"], .ep-item a, ul.episodes a, .wp-manga-chapter a, .listing-chapters_wrap a');
             
+            let usedEps = new Set();
             if (epLinks.length > 0) {
                 epLinks.forEach((link, idx) => {
-                    const epName = link.textContent.trim() || `Épisode ${idx + 1}`;
-                    episodes.push({
-                        season: 1,
-                        episode: parseInt(epName.match(/\d+(\.\d+)?/) ? epName.match(/\d+(\.\d+)?/)[0] : (epLinks.length - idx), 10),
-                        name: epName,
-                        url: link.getAttribute('href'),
-                        playbackPolicy: 'none'
-                    });
+                    const epUrl = link.getAttribute('href');
+                    if(epUrl && !usedEps.has(epUrl) && /episode/i.test(epUrl)) {
+                        usedEps.add(epUrl);
+                        let epName = link.textContent.trim() || `Épisode`;
+                        let epNum = (epLinks.length - idx);
+                        // Tenter d'extraire le numéro depuis le texte ou l'URL
+                        const numMatch = epName.match(/\d+(\.\d+)?/) || epUrl.match(/episode-(\d+)/i);
+                        if (numMatch) epNum = parseFloat(numMatch[0] || numMatch[1]);
+                        
+                        episodes.push({
+                            season: 1,
+                            episode: epNum,
+                            name: `Épisode ${epNum}`,
+                            url: epUrl,
+                            playbackPolicy: 'none'
+                        });
+                    }
                 });
-            } else {
+            }
+            
+            if (episodes.length === 0) {
                 const epNumMatch = url.match(/episode-(\d+)/i);
                 if (epNumMatch) {
                     episodes.push({
@@ -276,7 +320,9 @@
             cb({
                 success: true,
                 data: {
-                    title,
+                    title: title,
+                    url: url,
+                    type: "anime",
                     description,
                     posterUrl,
                     year,
