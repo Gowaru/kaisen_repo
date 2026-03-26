@@ -78,80 +78,47 @@
             const doc = await parseHtml(res.data);
             const data = {};
 
-            // Parsing section by section for richer home page
-            const wrappers = doc.querySelectorAll('section, .module, .widget, .manga-slider, .page-item-detail');
-            let usedIds = new Set();
-            
-            wrappers.forEach(wrap => {
-                const titleEl = wrap.querySelector('.widget-title, h2, h3, .title');
-                const list = wrap.querySelectorAll('article, .item, .c-tabs-item__content, .page-item-detail, .manga-slider-item');
-                
-                if (titleEl && list && list.length > 0) {
-                    const sectionTitle = titleEl.textContent.trim().replace(/^Voir[^a-zA-Z]/i, '').trim() || "Tendances";
-                    const items = [];
-                    
-                    list.forEach(article => {
-                        const tEl = article.querySelector('.entry-title a, h2 a, h3 a, .post-title a, .name, .title, a');
-                        const imgEl = article.querySelector('img');
-                        const linkEl = article.querySelector('a');
-
-                        if (imgEl && linkEl) {
-                            let itemTitle = tEl ? tEl.textContent.trim() : '';
-                            if (!itemTitle) itemTitle = imgEl.getAttribute('title') || imgEl.getAttribute('alt') || '';
-                            itemTitle = itemTitle.replace(/Voir Anime|Anime/i, '').trim() || 'Inconnu';
-                            
-                            const itemUrl = linkEl.getAttribute('href');
-                            let pUrl = imgEl.getAttribute('data-src') || imgEl.getAttribute('data-lazy-src') || imgEl.getAttribute('src') || '';
-                            if (pUrl.startsWith('//')) pUrl = 'https:' + pUrl;
-                            else if (pUrl.startsWith('/')) pUrl = baseUrl + pUrl;
-
-                            if (itemUrl && !usedIds.has(itemUrl) && !itemUrl.includes('void')) {
-                                usedIds.add(itemUrl);
-                                items.push({
-                                    title: itemTitle,
-                                    url: itemUrl,
-                                    posterUrl: pUrl,
-                                    type: 'anime',
-                                    status: 'ongoing',
-                                    playbackPolicy: 'none'
-                                });
-                            }
-                        }
-                    });
-                    
-                    if (items.length > 0 && sectionTitle) {
-                        data[sectionTitle] = items;
-                    }
-                }
-            });
-
-            // Fallback for single main list
-            if (Object.keys(data).length === 0) {
+            const extractItems = (nodes) => {
                 const items = [];
-                let articles = doc.querySelectorAll('article.anime-post, article.hentry');
-                if (!articles || articles.length === 0) {
-                    articles = doc.querySelectorAll('.item, .post-item, .bsx, article, .video-block, .page-item-detail, .c-tabs-item__content');
-                }
-                articles.forEach(article => {
-                    const titleEl = article.querySelector('.entry-title a, h2 a, h3 a, h2, h3, .name, .title, .post-title a');
-                    const imgEl = article.querySelector('img');
-                    const linkEl = article.querySelector('a');
+                nodes.forEach(el => {
+                    const titleEl = el.querySelector('.post-title a, h3 a, h2 a, .title, .name');
+                    const linkEl = el.querySelector('a');
+                    const imgEl = el.querySelector('img');
 
-                    if (imgEl && linkEl) {
+                    if (linkEl) {
                         let itemTitle = titleEl ? titleEl.textContent.trim() : '';
-                        if (!itemTitle) itemTitle = imgEl.getAttribute('title') || imgEl.getAttribute('alt') || '';
-                        itemTitle = itemTitle.replace(/Voir Anime|Anime/i, '').trim() || 'Inconnu';
+                        if (!itemTitle && imgEl) itemTitle = imgEl.getAttribute('title') || imgEl.getAttribute('alt') || '';
+                        itemTitle = itemTitle.replace(/Voir Anime|Anime/i, '').trim();
                         
                         const itemUrl = linkEl.getAttribute('href');
-                        let pUrl = imgEl.getAttribute('data-src') || imgEl.getAttribute('data-lazy-src') || imgEl.getAttribute('src') || '';
-                        if (pUrl.startsWith('//')) pUrl = 'https:' + pUrl;
-                        else if (pUrl.startsWith('/')) pUrl = baseUrl + pUrl;
+                        
+                        let pUrl = '';
+                        if (imgEl) {
+                            const attrs = ['data-wpfc-original-src', 'data-src', 'data-lazy-src', 'data-original', 'src'];
+                            for (let attr of attrs) {
+                                let val = imgEl.getAttribute(attr);
+                                if (val && !val.includes('data:image')) {
+                                    pUrl = val;
+                                    break;
+                                }
+                            }
+                        } else {
+                            const bgEl = el.querySelector('[style*="background-image"]');
+                            if (bgEl) {
+                                const bgStyle = bgEl.getAttribute('style');
+                                const match = bgStyle.match(/url\(['"]?(.*?)['"]?\)/);
+                                if (match) pUrl = match[1];
+                            }
+                        }
 
-                        if (itemUrl && !itemUrl.includes('void')) {
+                        if (pUrl && pUrl.startsWith('//')) pUrl = 'https:' + pUrl;
+                        else if (pUrl && pUrl.startsWith('/')) pUrl = baseUrl + pUrl;
+
+                        if (itemTitle && itemUrl && itemUrl.startsWith('http') && !itemUrl.includes('void')) {
                             items.push({
-                                title: itemTitle,
+                                title: itemTitle || 'Inconnu',
                                 url: itemUrl,
-                                posterUrl: pUrl,
+                                posterUrl: pUrl || '',
                                 type: 'anime',
                                 status: 'ongoing',
                                 playbackPolicy: 'none'
@@ -159,16 +126,47 @@
                         }
                     }
                 });
-                if (items.length > 0) {
-                    data["Derniers Ajouts"] = items;
-                }
+                return items;
+            };
+
+            // 1. Slider (Tendances)
+            const sliderItems = doc.querySelectorAll('.manga-slider-item, .slider__item, .swiper-slide');
+            if (sliderItems.length > 0) {
+                const arr = extractItems(sliderItems);
+                if(arr.length) data["Tendances"] = arr;
             }
 
-            // Move the first or a "tendance/popular" array to "Trending" to map properly in the UI Hero banner
+            // 2. Latest/Main content
+            const mainItems = doc.querySelectorAll('.page-item-detail, article.anime-post, article.hentry, .item, .c-tabs-item__content .page-item-detail');
+            if (mainItems.length > 0) {
+                // Deduplicate slider items if they appear in latest
+                const seenUrls = new Set((data["Tendances"] || []).map(x => x.url));
+                let arr = [];
+                mainItems.forEach(item => {
+                    const link = item.querySelector('a');
+                    if(link) {
+                        const href = link.getAttribute('href');
+                        if(href && !seenUrls.has(href)) {
+                            seenUrls.add(href);
+                            arr.push(item);
+                        }
+                    }
+                });
+                const extracted = extractItems(arr.slice(0, 40)); 
+                if(extracted.length) data["Derniers Ajouts"] = extracted;
+            }
+
+            // 3. Fallback move to Trending
             if (data["Trending"] === undefined && Object.keys(data).length > 0) {
-                const firstKey = Object.keys(data)[0];
-                data["Trending"] = data[firstKey];
-                delete data[firstKey];
+                const keys = Object.keys(data);
+                if(keys.includes("Tendances")) {
+                    data["Trending"] = data["Tendances"];
+                    delete data["Tendances"];
+                } else {
+                    const firstKey = keys[0];
+                    data["Trending"] = data[firstKey];
+                    delete data[firstKey];
+                }
             }
 
             cb({ success: true, data: data });
@@ -217,22 +215,34 @@
                     const imgEl = article.querySelector('img');
                     const linkEl = article.querySelector('a');
 
-                    if (imgEl && linkEl) {
+                    if (linkEl) {
                         let itemTitle = titleEl ? titleEl.textContent.trim() : '';
-                        if (!itemTitle) itemTitle = imgEl.getAttribute('title') || imgEl.getAttribute('alt') || '';
+                        if (!itemTitle && imgEl) itemTitle = imgEl.getAttribute('title') || imgEl.getAttribute('alt') || '';
                         itemTitle = itemTitle.replace(/Voir Anime|Anime/i, '').trim() || 'Inconnu';
                         
                         const itemUrl = linkEl.getAttribute('href');
-                        let pUrl = imgEl.getAttribute('data-src') || imgEl.getAttribute('data-lazy-src') || imgEl.getAttribute('src') || '';
-                        if (pUrl.startsWith('//')) pUrl = 'https:' + pUrl;
-                        else if (pUrl.startsWith('/')) pUrl = baseUrl + pUrl;
+                        
+                        let pUrl = '';
+                        if (imgEl) {
+                            const attrs = ['data-wpfc-original-src', 'data-src', 'data-lazy-src', 'data-original', 'src'];
+                            for (let attr of attrs) {
+                                let val = imgEl.getAttribute(attr);
+                                if (val && !val.includes('data:image')) {
+                                    pUrl = val;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (pUrl && pUrl.startsWith('//')) pUrl = 'https:' + pUrl;
+                        else if (pUrl && pUrl.startsWith('/')) pUrl = baseUrl + pUrl;
 
                         if (itemUrl && !seen.has(itemUrl) && !itemUrl.includes('void')) {
                             seen.add(itemUrl);
                             results.push({
                                 title: itemTitle,
                                 url: itemUrl,
-                                posterUrl: pUrl,
+                                posterUrl: pUrl || '',
                                 type: 'anime',
                                 status: 'ongoing',
                                 playbackPolicy: 'none'
@@ -257,9 +267,22 @@
             let title = doc.querySelector('.entry-title, h1, .name, .tt, .post-title h1, .post-title')?.textContent.trim() || '';
             const description = doc.querySelector('.entry-content p, .desc, .synopsis, .summary__content p')?.textContent.trim() || '';
             const imgEl = doc.querySelector('.post-thumbnail img, .thumb img, .poster img, .sheader img, .summary_image img');
-            let posterUrl = imgEl ? (imgEl.getAttribute('data-src') || imgEl.getAttribute('data-lazy-src') || imgEl.getAttribute('src') || '') : '';
-            if (posterUrl.startsWith('//')) posterUrl = 'https:' + posterUrl;
-            else if (posterUrl.startsWith('/')) posterUrl = baseUrl + posterUrl;
+            
+            let posterUrl = '';
+            if (imgEl) {
+                const attrs = ['data-wpfc-original-src', 'data-src', 'data-lazy-src', 'data-original', 'src'];
+                for (let attr of attrs) {
+                    let val = imgEl.getAttribute(attr);
+                    if (val && !val.includes('data:image')) {
+                        posterUrl = val;
+                        break;
+                    }
+                }
+            }
+            if (!posterUrl && imgEl) posterUrl = imgEl.getAttribute('src') || '';
+            
+            if (posterUrl && posterUrl.startsWith('//')) posterUrl = 'https:' + posterUrl;
+            else if (posterUrl && posterUrl.startsWith('/')) posterUrl = baseUrl + posterUrl;
             
             if (!title && imgEl) title = imgEl.getAttribute('title') || imgEl.getAttribute('alt') || 'Inconnu';
             title = title.replace(/Voir Anime|Anime/i, '').trim();
