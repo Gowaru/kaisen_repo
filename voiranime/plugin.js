@@ -44,7 +44,7 @@ const headers = {
     async function getHome(cb) {
         try {
             const url = baseUrl;
-            const res = await axios.get(url, { headers }
+            const res = await axios.get(url, { headers });
             const doc = await parseHtml(res.data);
             const items = [];
 
@@ -62,7 +62,7 @@ const headers = {
                         type: 'anime',
                         status: 'ongoing',
                         playbackPolicy: 'none'
-                    }
+                    });
                 }
             });
 
@@ -238,7 +238,7 @@ const headers = {
                     quality: '1080p',
                     source: new URL(src).hostname
                 }));
-            });
+            };
 
             cb({ success: true, data: streams });
         } catch (e) {

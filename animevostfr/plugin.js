@@ -41,6 +41,17 @@
         'Upgrade-Insecure-Requests': '1'
     };
 
+    function formatTitle(title, url) {
+        let t = title.trim().replace(/^Anime|Anime$/ig, '').trim();
+        const u = url.toLowerCase();
+        if (u.includes('vostfr')) {
+            if (!t.toLowerCase().includes('vostfr')) t += ' (VOSTFR)';
+        } else if (u.includes('-vf') || u.includes('vf-')) {
+            if (!t.toLowerCase().includes('vf')) t += ' (VF)';
+        }
+        return t;
+    }
+
     async function getHome(cb) {
         try {
             const url = baseUrl;
@@ -65,9 +76,10 @@
                         const linkEl = entry.querySelector('a');
 
                         if (tEl && linkEl) {
+                            const urlStr = linkEl.getAttribute('href') || linkEl.getAttribute('data-href') || '';
                             items.push({
-                                title: tEl.textContent.trim().replace('Anime', '').trim(),
-                                url: linkEl.getAttribute('href'),
+                                title: formatTitle(tEl.textContent.trim(), urlStr),
+                                url: urlStr,
                                 posterUrl: imgEl ? imgEl.getAttribute('src') : '',
                                 type: 'anime',
                                 status: 'ongoing',
@@ -92,9 +104,10 @@
                     const linkEl = entry.querySelector('a');
 
                     if (titleEl && linkEl) {
+                        const urlStr = linkEl.getAttribute('href') || linkEl.getAttribute('data-href') || '';
                         items.push({
-                            title: titleEl.textContent.trim().replace('Anime', '').trim(),
-                            url: linkEl.getAttribute('href'),
+                            title: formatTitle(titleEl.textContent.trim(), urlStr),
+                            url: urlStr,
                             posterUrl: imgEl ? imgEl.getAttribute('src') : '',
                             type: 'anime',
                             status: 'ongoing',
@@ -151,11 +164,11 @@
                     const linkEl = entry.querySelector('a');
 
                     if (titleEl && linkEl) {
-                        const itemUrl = linkEl.getAttribute('href');
+                        const itemUrl = linkEl.getAttribute('href') || linkEl.getAttribute('data-href') || '';
                         if (!seen.has(itemUrl)) {
                             seen.add(itemUrl);
                             results.push({
-                                title: titleEl.textContent.trim().replace('Anime', '').trim(),
+                                title: formatTitle(titleEl.textContent.trim(), itemUrl),
                                 url: itemUrl,
                                 posterUrl: imgEl ? imgEl.getAttribute('src') : '',
                                 type: 'anime',
@@ -179,7 +192,8 @@
             const res = await axios.get(url, { headers });
             const doc = await parseHtml(res.data);
 
-            const title = doc.querySelector('h1.Title, .Title')?.textContent.trim() || '';
+            const titleRaw = doc.querySelector('h1.Title, .Title')?.textContent.trim() || '';
+            const title = formatTitle(titleRaw, url);
             const description = doc.querySelector('.Description p, .Synopsis p, .Description, .Synopsis, p')?.textContent.trim() || '';
             const posterUrl = doc.querySelector('.Image figure img, .poster img')?.getAttribute('src') || '';
 
