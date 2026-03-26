@@ -4,11 +4,20 @@
         get: async (url, config = {}) => {
             const h = config.headers || {};
             if (typeof http_get !== 'undefined') {
-                let r = await http_get(url, h);
+                let r;
+                try {
+                    r = await http_get(url, h);
+                } catch (e) {
+                    r = { status: 403, body: 'cloudflare' };
+                }
                 if (r.status === 403 || r.status === 503 || (typeof r.body === 'string' && (r.body.includes('Just a moment') || r.body.toLowerCase().includes('cloudflare') || r.body.includes('Challenge Validation')))) {
                     if (typeof solveCaptcha !== 'undefined') {
                         await solveCaptcha('cloudflare', url);
-                        r = await http_get(url, h);
+                        try {
+                            r = await http_get(url, h);
+                        } catch (e) {
+                            r = { status: 500, body: "" };
+                        }
                     }
                 }
                 let parsed = r.body;
@@ -20,11 +29,20 @@
         post: async (url, data, config = {}) => {
             const h = config.headers || {};
             if (typeof http_post !== 'undefined') {
-                let r = await http_post(url, h, data);
+                let r;
+                try {
+                    r = await http_post(url, h, data);
+                } catch (e) {
+                    r = { status: 403, body: 'cloudflare' };
+                }
                 if (r.status === 403 || r.status === 503 || (typeof r.body === 'string' && (r.body.includes('Just a moment') || r.body.toLowerCase().includes('cloudflare') || r.body.includes('Challenge Validation')))) {
                     if (typeof solveCaptcha !== 'undefined') {
                         await solveCaptcha('cloudflare', url);
-                        r = await http_post(url, h, data);
+                        try {
+                            r = await http_post(url, h, data);
+                        } catch (e) {
+                            r = { status: 500, body: "" };
+                        }
                     }
                 }
                 let parsed = r.body;
@@ -38,13 +56,14 @@
     
     const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://voiranime.tv/';
     const headers = {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
         'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache',
-        'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Ch-Ua': '"Chromium";v="116", "Not)A;Brand";v="24", "Google Chrome";v="116"',
+        'Sec-Ch-Ua-Mobile': '?1',
+        'Sec-Ch-Ua-Platform': '"Android"',
         'Sec-Fetch-Dest': 'document',
         'Sec-Fetch-Mode': 'navigate',
         'Sec-Fetch-Site': 'none',
@@ -59,9 +78,12 @@
             const doc = await parseHtml(res.data);
             const items = [];
 
-            const articles = doc.querySelectorAll('article.anime-post, article.hentry');
+            let articles = doc.querySelectorAll('article.anime-post, article.hentry');
+            if (!articles || articles.length === 0) {
+                articles = doc.querySelectorAll('.item, .post-item, .bsx, article, .video-block, .page-item-detail');
+            }
             articles.forEach(article => {
-                const titleEl = article.querySelector('.entry-title a, h2 a, h3 a');
+                const titleEl = article.querySelector('.entry-title a, h2 a, h3 a, h2, h3, .name, .title, .tt');
                 const imgEl = article.querySelector('img');
                 const linkEl = article.querySelector('a');
 
@@ -91,9 +113,12 @@
             const doc = await parseHtml(res.data);
             const items = [];
 
-            const articles = doc.querySelectorAll('article.anime-post, article.hentry');
+            let articles = doc.querySelectorAll('article.anime-post, article.hentry');
+            if (!articles || articles.length === 0) {
+                articles = doc.querySelectorAll('.item, .post-item, .bsx, article, .video-block, .page-item-detail');
+            }
             articles.forEach(article => {
-                const titleEl = article.querySelector('.entry-title a, h2 a, h3 a');
+                const titleEl = article.querySelector('.entry-title a, h2 a, h3 a, h2, h3, .name, .title, .tt');
                 const imgEl = article.querySelector('img');
                 const linkEl = article.querySelector('a');
 
@@ -121,12 +146,12 @@
             const res = await axios.get(url, { headers });
             const doc = await parseHtml(res.data);
 
-            const title = doc.querySelector('.entry-title')?.textContent.trim() || '';
-            const description = doc.querySelector('.entry-content p')?.textContent.trim() || '';
-            const posterUrl = doc.querySelector('.post-thumbnail img')?.src || '';
+            const title = doc.querySelector('.entry-title, h1, .name, .tt')?.textContent.trim() || '';
+            const description = doc.querySelector('.entry-content p, .desc, .synopsis')?.textContent.trim() || '';
+            const posterUrl = doc.querySelector('.post-thumbnail img, .thumb img, .poster img, .sheader img')?.src || '';
 
             const episodes = [];
-            const epLinks = doc.querySelectorAll('.episodes-list a, .eplist a, a[href*="/episode/"]');
+            const epLinks = doc.querySelectorAll('.episodes-list a, .eplist a, a[href*="/episode/"], .ep-item a, ul.episodes a');
             
             if (epLinks.length > 0) {
                 epLinks.forEach((link, idx) => {
