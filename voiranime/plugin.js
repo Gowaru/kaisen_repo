@@ -76,65 +76,147 @@
             const url = baseUrl;
             const res = await axios.get(url, { headers });
             const doc = await parseHtml(res.data);
-            const items = [];
+            const data = {};
 
-            let articles = doc.querySelectorAll('article.anime-post, article.hentry');
-            if (!articles || articles.length === 0) {
-                articles = doc.querySelectorAll('.item, .post-item, .bsx, article, .video-block, .page-item-detail');
-            }
-            articles.forEach(article => {
-                const titleEl = article.querySelector('.entry-title a, h2 a, h3 a, h2, h3, .name, .title, .tt');
-                const imgEl = article.querySelector('img');
-                const linkEl = article.querySelector('a');
+            // Parsing section by section for richer home page
+            const wrappers = doc.querySelectorAll('section, .module, .widget, .manga-slider, .page-item-detail');
+            let usedIds = new Set();
+            
+            wrappers.forEach(wrap => {
+                const titleEl = wrap.querySelector('.widget-title, h2, h3, .title');
+                const list = wrap.querySelectorAll('article, .item, .c-tabs-item__content, .page-item-detail, .manga-slider-item');
+                
+                if (titleEl && list && list.length > 0) {
+                    const sectionTitle = titleEl.textContent.trim().replace(/^Voir[^a-zA-Z]/i, '').trim() || "Tendances";
+                    const items = [];
+                    
+                    list.forEach(article => {
+                        const tEl = article.querySelector('.entry-title a, h2 a, h3 a, .post-title a, .name, .title, a');
+                        const imgEl = article.querySelector('img');
+                        const linkEl = article.querySelector('a');
 
-                if (titleEl && linkEl) {
-                    items.push({
-                        title: titleEl.textContent.trim().toLowerCase(),
-                        url: linkEl?.getAttribute('href'),
-                        posterUrl: imgEl ? imgEl?.getAttribute('src') : '',
-                        type: 'anime',
-                        status: 'ongoing',
-                        playbackPolicy: 'none'
+                        if (tEl && linkEl) {
+                            const itemUrl = linkEl.getAttribute('href');
+                            if (!usedIds.has(itemUrl)) {
+                                usedIds.add(itemUrl);
+                                items.push({
+                                    title: tEl.textContent.trim().replace('Anime', '').trim(),
+                                    url: itemUrl,
+                                    posterUrl: imgEl ? (imgEl.getAttribute('data-src') || imgEl.getAttribute('data-lazy-src') || imgEl.getAttribute('src') || '') : '',
+                                    type: 'anime',
+                                    status: 'ongoing',
+                                    playbackPolicy: 'none'
+                                });
+                            }
+                        }
                     });
+                    
+                    if (items.length > 0 && sectionTitle) {
+                        data[sectionTitle] = items;
+                    }
                 }
             });
 
-            cb({ success: true, data: { "Derniers Ajouts": items } });
+            // Fallback for single main list
+            if (Object.keys(data).length === 0) {
+                const items = [];
+                let articles = doc.querySelectorAll('article.anime-post, article.hentry');
+                if (!articles || articles.length === 0) {
+                    articles = doc.querySelectorAll('.item, .post-item, .bsx, article, .video-block, .page-item-detail, .c-tabs-item__content');
+                }
+                articles.forEach(article => {
+                    const titleEl = article.querySelector('.entry-title a, h2 a, h3 a, h2, h3, .name, .title, .post-title a');
+                    const imgEl = article.querySelector('img');
+                    const linkEl = article.querySelector('a');
+
+                    if (titleEl && linkEl) {
+                        const itemUrl = linkEl.getAttribute('href');
+                        items.push({
+                            title: titleEl.textContent.trim(),
+                            url: itemUrl,
+                            posterUrl: imgEl ? (imgEl.getAttribute('data-src') || imgEl.getAttribute('data-lazy-src') || imgEl.getAttribute('src') || '') : '',
+                            type: 'anime',
+                            status: 'ongoing',
+                            playbackPolicy: 'none'
+                        });
+                    }
+                });
+                if (items.length > 0) {
+                    data["Derniers Ajouts"] = items;
+                }
+            }
+
+            // Move the first or a "tendance/popular" array to "Trending" to map properly in the UI Hero banner
+            if (data["Trending"] === undefined && Object.keys(data).length > 0) {
+                const firstKey = Object.keys(data)[0];
+                data["Trending"] = data[firstKey];
+                delete data[firstKey];
+            }
+
+            cb({ success: true, data: data });
         } catch (e) {
             console.error(e);
             cb({ success: false, errorCode: "HOME_ERROR", message: e.stack });
         }
     }
 
+    async function getAltTitles(query) {
+        try {
+            const rq = await axios.post('https://graphql.anilist.co', JSON.stringify({
+                query: `query ($search: String) { Media(search: $search, type: ANIME) { title { romaji english } } }`,
+                variables: { search: query }
+            }), { headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' } });
+            let titles = [];
+            if(rq.data?.data?.Media?.title) {
+                const t = rq.data.data.Media.title;
+                if(t.romaji) titles.push(t.romaji);
+                if(t.english) titles.push(t.english);
+            }
+            return titles;
+        } catch(e) { return []; }   
+    }
+
     async function search(query, cb) {
         try {
-            const url = `${baseUrl}?s=${encodeURIComponent(query)}`;
-            const res = await axios.get(url, { headers });
-            const doc = await parseHtml(res.data);
-            const items = [];
+            let queries = [query];
+            const alt = await getAltTitles(query);
+            queries = [...new Set([...queries, ...alt])];
+            
+            const results = [];
+            const seen = new Set();
 
-            let articles = doc.querySelectorAll('article.anime-post, article.hentry');
-            if (!articles || articles.length === 0) {
-                articles = doc.querySelectorAll('.item, .post-item, .bsx, article, .video-block, .page-item-detail');
-            }
-            articles.forEach(article => {
-                const titleEl = article.querySelector('.entry-title a, h2 a, h3 a, h2, h3, .name, .title, .tt');
-                const imgEl = article.querySelector('img');
-                const linkEl = article.querySelector('a');
+            for (let q of queries) {
+                const url = `${baseUrl}?s=${encodeURIComponent(q.trim())}`;
+                const res = await axios.get(url, { headers });
+                const doc = await parseHtml(res.data);
 
-                if (titleEl && linkEl) {
-                    items.push({
-                        title: titleEl.textContent.trim().toLowerCase(),
-                        url: linkEl?.getAttribute('href'),
-                        posterUrl: imgEl ? imgEl?.getAttribute('src') : '',
-                        type: 'anime',
-                        status: 'ongoing',
-                        playbackPolicy: 'none'
-                    });
+                let articles = doc.querySelectorAll('article.anime-post, article.hentry');
+                if (!articles || articles.length === 0) {
+                    articles = doc.querySelectorAll('.item, .post-item, .bsx, article, .video-block, .page-item-detail, .c-tabs-item__content');
                 }
-            });
+                articles.forEach(article => {
+                    const titleEl = article.querySelector('.entry-title a, h2 a, h3 a, h2, h3, .name, .title, .tt, .post-title h3 a');
+                    const imgEl = article.querySelector('img');
+                    const linkEl = article.querySelector('a');
 
-            cb({ success: true, data: items });
+                    if (titleEl && linkEl) {
+                        const itemUrl = linkEl.getAttribute('href');
+                        if (!seen.has(itemUrl)) {
+                            seen.add(itemUrl);
+                            results.push({
+                                title: titleEl.textContent.trim().replace('Anime', '').trim(),
+                                url: itemUrl,
+                                posterUrl: imgEl ? (imgEl.getAttribute('data-src') || imgEl.getAttribute('data-lazy-src') || imgEl.getAttribute('src') || '') : '',
+                                type: 'anime',
+                                status: 'ongoing',
+                                playbackPolicy: 'none'
+                            });
+                        }
+                    }
+                });
+            }
+
+            cb({ success: true, data: results });
         } catch (e) {
             console.error(e);
             cb({ success: false, errorCode: "SEARCH_ERROR", message: e.stack });
@@ -146,21 +228,35 @@
             const res = await axios.get(url, { headers });
             const doc = await parseHtml(res.data);
 
-            const title = doc.querySelector('.entry-title, h1, .name, .tt')?.textContent.trim() || '';
-            const description = doc.querySelector('.entry-content p, .desc, .synopsis')?.textContent.trim() || '';
-            const posterUrl = doc.querySelector('.post-thumbnail img, .thumb img, .poster img, .sheader img')?.src || '';
+            const title = doc.querySelector('.entry-title, h1, .name, .tt, .post-title h1')?.textContent.trim() || '';
+            const description = doc.querySelector('.entry-content p, .desc, .synopsis, .summary__content p')?.textContent.trim() || '';
+            const imgEl = doc.querySelector('.post-thumbnail img, .thumb img, .poster img, .sheader img, .summary_image img');
+            const posterUrl = imgEl ? (imgEl.getAttribute('data-src') || imgEl.getAttribute('data-lazy-src') || imgEl.getAttribute('src') || '') : '';
+
+            let year = 0;
+            const yearMatch = res.data.match(/>(\d{4})<\/a>/);
+            if (yearMatch) year = parseInt(yearMatch[1], 10);
+
+            let score = 0;
+            const scoreMatch = res.data.match(/score.*?(\d+(\.\d+)?)/i);
+            if (scoreMatch) score = parseFloat(scoreMatch[1]);
+
+            let status = 'ongoing';
+            if (res.data.toLowerCase().includes('terminé') || res.data.toLowerCase().includes('completed')) {
+                status = 'completed';
+            }
 
             const episodes = [];
-            const epLinks = doc.querySelectorAll('.episodes-list a, .eplist a, a[href*="/episode/"], .ep-item a, ul.episodes a');
+            const epLinks = doc.querySelectorAll('.episodes-list a, .eplist a, a[href*="/episode/"], .ep-item a, ul.episodes a, .wp-manga-chapter a, .listing-chapters_wrap a');
             
             if (epLinks.length > 0) {
                 epLinks.forEach((link, idx) => {
                     const epName = link.textContent.trim() || `Épisode ${idx + 1}`;
                     episodes.push({
                         season: 1,
-                        episode: parseInt(epName.match(/\d+/) ? epName.match(/\d+/)[0] : 0, 10),
+                        episode: parseInt(epName.match(/\d+(\.\d+)?/) ? epName.match(/\d+(\.\d+)?/)[0] : (epLinks.length - idx), 10),
                         name: epName,
-                        url: link?.getAttribute('href'),
+                        url: link.getAttribute('href'),
                         playbackPolicy: 'none'
                     });
                 });
@@ -183,6 +279,9 @@
                     title,
                     description,
                     posterUrl,
+                    year,
+                    score,
+                    status,
                     episodes: episodes.sort((a, b) => a.episode - b.episode)
                 }
             });
