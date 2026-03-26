@@ -122,7 +122,7 @@
     "packageName": "com.gowaru.kaisen.voiranime",
     "name": "VoirAnime",
     "version": 2,
-    "baseUrl": "https://v6.voiranime.com/",
+    "baseUrl": "https://voiranime.tv/",
     "description": "VoirAnime - Streaming anime VF & VOSTFR",
     "authors": [
       "Gowaru"
