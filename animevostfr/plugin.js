@@ -330,13 +330,22 @@
             const doc = await parseHtml(res.data);
             const streams = [];
 
-            const iframes = doc.querySelectorAll('iframe');
-            for (let iframe of iframes) {
-                let src = iframe?.getAttribute('src');
+            const sources = [];
+            doc.querySelectorAll('iframe').forEach(i => {
+                let src = i.getAttribute('src');
+                if (src) sources.push(src);
+            });
+            doc.querySelectorAll('.lazy-player, [data-src]').forEach(el => {
+                let src = el.getAttribute('data-src');
+                if (src) sources.push(src);
+            });
+
+            const uniqueSources = [...new Set(sources)];
+
+            for (let src of uniqueSources) {
                 if (!src) continue;
                 if (src.startsWith('//')) src = 'https:' + src;
                 
-                // Resolve internal embeds like ?trembed=0...
                 if (src.includes('trembed') || src.includes('animevostfr.org')) {
                     try {
                         const embedRes = await axios.get(src, { headers: { ...headers, 'Referer': url } });
@@ -344,20 +353,32 @@
                         if (embedMatch && embedMatch[1]) {
                             src = embedMatch[1];
                             if (src.startsWith('//')) src = 'https:' + src;
+                        } else if (embedRes.request && embedRes.request.res && embedRes.request.res.responseUrl) {
+                            let redirectedUrl = embedRes.request.res.responseUrl;
+                            if (redirectedUrl !== src && !redirectedUrl.includes('trembed')) {
+                                src = redirectedUrl;
+                            }
                         }
-                    } catch (e) { console.error('Failed to resolve internal embed', e); }
+                    } catch (e) {
+                         if (e.response && e.response.status === 302 && e.response.headers.location) {
+                             src = e.response.headers.location;
+                             if (src.startsWith('//')) src = 'https:' + src;
+                         }
+                    }
                 }
 
-                let hostname = 'Lecteur';
-                try { hostname = new URL(src).hostname; } catch(e) {}
-                
-                streams.push(await Extractors.resolveStream(src));
+                try {
+                    let resolved = await Extractors.resolveStream(src);
+                    if (resolved) streams.push(resolved);
+                } catch(e) {
+                    // console.error("Extractor error for " + src, e);
+                }
             }
 
-            cb({ success: true, data: streams });
+            const validStreams = streams.filter(s => s && s.url);
+            cb({ success: true, data: validStreams });
         } catch (e) {
-            console.error(e);
-            cb({ success: false, errorCode: "STREAM_ERROR", message: e.stack });
+            cb({ success: false, errorCode: "STREAM_ERROR", message: String(e) });
         }
     }
 
