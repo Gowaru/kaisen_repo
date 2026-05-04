@@ -28,7 +28,22 @@ const axios = {
     get: async (url, config = {}) => {
         const h = config.headers || {};
         if (typeof http_get !== 'undefined') {
-            const r = await http_get(url, h);
+            let r;
+            try {
+                r = await http_get(url, h);
+            } catch (e) {
+                r = { status: 403, body: 'cloudflare' };
+            }
+            if (r.status === 403 || r.status === 503 || (typeof r.body === 'string' && (r.body.includes('Just a moment') || r.body.toLowerCase().includes('cloudflare') || r.body.includes('Challenge Validation')))) {
+                if (typeof solveCaptcha !== 'undefined') {
+                    await solveCaptcha('cloudflare', url);
+                    try {
+                        r = await http_get(url, h);
+                    } catch (e) {
+                        r = { status: 500, body: "" };
+                    }
+                }
+            }
             let parsed = r.body;
             try { parsed = JSON.parse(r.body); } catch (e) { }
             return { data: parsed, status: r.status };
@@ -38,7 +53,22 @@ const axios = {
     post: async (url, data, config = {}) => {
         const h = config.headers || {};
         if (typeof http_post !== 'undefined') {
-            const r = await http_post(url, h, data);
+            let r;
+            try {
+                r = await http_post(url, h, data);
+            } catch (e) {
+                r = { status: 403, body: 'cloudflare' };
+            }
+            if (r.status === 403 || r.status === 503 || (typeof r.body === 'string' && (r.body.includes('Just a moment') || r.body.toLowerCase().includes('cloudflare') || r.body.includes('Challenge Validation')))) {
+                if (typeof solveCaptcha !== 'undefined') {
+                    await solveCaptcha('cloudflare', url);
+                    try {
+                        r = await http_post(url, h, data);
+                    } catch (e) {
+                        r = { status: 500, body: "" };
+                    }
+                }
+            }
             let parsed = r.body;
             try { parsed = JSON.parse(r.body); } catch (e) { }
             return { data: parsed, status: r.status };
@@ -48,6 +78,7 @@ const axios = {
 };
 
 const Extractors = {
+
     async resolveStream(url) {
         if (!url) return null;
         try {
@@ -70,26 +101,60 @@ const Extractors = {
             }
 
             if (extracted && extracted.length > 0) {
-                return extracted[0]; // return first stream or modify to return all
+                return extracted[0]; 
             }
         } catch (e) { }
 
-        // Fallbacks for local / standard proxying
-        let finalStream = null;
-        if (url.includes('vidmoly')) finalStream = { url: url, quality: 'Auto', source: 'Vidmoly', headers: { Referer: 'https://vidmoly.to/' } };
+        // Manual Extraction for Sibnet
+        if (url.includes('sibnet.ru')) {
+            try {
+                const res = await axios.get(url);
+                const match = res.data.match(/player\.src\(\[\{src:\s*["']([^"']+)["']/i) || res.data.match(/src:\s*["'](\/v\/.*?\.mp4)["']/i);
+                if (match) {
+                    let videoUrl = match[1];
+                    if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                    else if (videoUrl.startsWith('/')) videoUrl = 'https://video.sibnet.ru' + videoUrl;
+                    return new StreamResult({
+                        url: videoUrl,
+                        quality: 'Auto',
+                        source: 'Sibnet',
+                        headers: { 'Referer': url }
+                    });
+                }
+            } catch (e) { }
+        }
 
-        if (finalStream) {
+        // Manual Extraction for Sendvid
+        if (url.includes('sendvid.com')) {
+            try {
+                const res = await axios.get(url);
+                const match = res.data.match(/<source\s+src=["']([^"']+\.mp4)["']/i) || res.data.match(/video_source\s*=\s*["']([^"']+)["']/i);
+                if (match) {
+                    return new StreamResult({
+                        url: match[1],
+                        quality: 'Auto',
+                        source: 'Sendvid'
+                    });
+                }
+            } catch (e) { }
+        }
+
+        // Fallbacks for local / standard proxying
+        if (url.includes('vidmoly')) {
             return new StreamResult({
-                url: finalStream.url, quality: finalStream.quality, source: finalStream.source,
-                headers: finalStream.headers || {}
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'Vidmoly (Proxy)',
+                headers: { Referer: 'https://vidmoly.to/' }
             });
         }
+
         if (url.endsWith('.mp4') || url.endsWith('.m3u8')) {
             let host = 'Unknown'; try { host = new URL(url).hostname; } catch (e) { }
             return new StreamResult({ url: url, quality: 'Auto', source: host });
         }
 
-        // Magic proxy for anything else
+        // Magic proxy for anything else (Unknown iframes)
         let host = 'Unknown'; try { host = new URL(url).hostname; } catch (e) { }
         return new StreamResult({
             url: "MAGIC_PROXY_v1" + encodeBase64(url),
@@ -97,6 +162,7 @@ const Extractors = {
             source: host + " (Proxy)"
         });
     }
+
 };
 
 async function getHome(cb) {
@@ -216,6 +282,7 @@ async function getHome(cb) {
     }
 }
 
+
 async function search(query, cb) {
     try {
         let results = [];
@@ -288,6 +355,7 @@ async function search(query, cb) {
         cb({ success: false, errorCode: "SEARCH_ERROR", message: String(e) });
     }
 }
+
 
 async function load(url, cb) {
     try {
@@ -446,6 +514,7 @@ async function load(url, cb) {
     }
 }
 
+
 async function loadStreams(url, cb) {
     try {
         // Parse the streams packed in the load() step
@@ -492,6 +561,8 @@ async function loadStreams(url, cb) {
         cb({ success: false, errorCode: "STREAM_ERROR", message: String(e) });
     }
 }
+
+
 
 globalThis.getHome = getHome;
 globalThis.search = search;
