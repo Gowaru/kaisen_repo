@@ -26,6 +26,7 @@ jobs:
       - name: Deploy Repository
         run: |
           npm install -g skystream-cli
+          npm install
           skystream deploy -u https://raw.githubusercontent.com/${{ github.repository }}/main
 
       - name: Commit and Push changes
