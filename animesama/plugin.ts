@@ -2,11 +2,14 @@
 import { MixDrop, StreamTape, Voe, Filemoon, DoodExtractor, HubCloud } from 'skystream-extractors/dist/index.js';
 
 function encodeBase64(str) {
+    try {
+        if (typeof btoa === 'function') return btoa(str);
+    } catch (e) { }
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
     let output = "";
     let i = 0;
     str = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function (match, p1) {
-        return String.fromCharCode('0x' + p1);
+        return String.fromCharCode(parseInt(p1, 16));
     });
     while (i < str.length) {
         let chr1 = str.charCodeAt(i++);
@@ -28,7 +31,7 @@ const axios = {
     get: async (url, config = {}) => {
         const h = config.headers || {};
         if (!h['User-Agent']) h['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-        
+
         if (typeof http_get !== 'undefined') {
             let r;
             try {
@@ -46,8 +49,8 @@ const axios = {
                     }
                 }
             }
-            let parsed = r.body;
-            try { parsed = JSON.parse(r.body); } catch (e) { }
+            let parsed = r.body || "";
+            try { if (typeof r.body === 'string' && r.body.trim().startsWith('{')) parsed = JSON.parse(r.body); } catch (e) { }
             return { data: parsed, status: r.status };
         }
         return { data: "" };
@@ -55,7 +58,7 @@ const axios = {
     post: async (url, data, config = {}) => {
         const h = config.headers || {};
         if (!h['User-Agent']) h['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-        
+
         if (typeof http_post !== 'undefined') {
             let r;
             try {
@@ -73,8 +76,8 @@ const axios = {
                     }
                 }
             }
-            let parsed = r.body;
-            try { parsed = JSON.parse(r.body); } catch (e) { }
+            let parsed = r.body || "";
+            try { if (typeof r.body === 'string' && r.body.trim().startsWith('{')) parsed = JSON.parse(r.body); } catch (e) { }
             return { data: parsed, status: r.status };
         }
         return { data: "" };
@@ -108,7 +111,7 @@ const Extractors = {
             }
 
             if (extracted && extracted.length > 0) {
-                return extracted[0]; 
+                return extracted[0];
             }
         } catch (e) { }
 
@@ -118,9 +121,9 @@ const Extractors = {
                 const res = await axios.get(url, {
                     headers: { 'Referer': 'https://anime-sama.to/' }
                 });
-                const match = res.data.match(/player\.src\(\[\{src:\s*["']([^"']+)["']/i) || 
-                              res.data.match(/src:\s*["'](\/v\/.*?\.mp4)["']/i) ||
-                              res.data.match(/["']?src["']?\s*:\s*["']([^"']+\.mp4)["']/i);
+                const match = res.data.match(/player\.src\(\[\{src:\s*["']([^"']+)["']/i) ||
+                    res.data.match(/src:\s*["'](\/v\/.*?\.mp4)["']/i) ||
+                    res.data.match(/["']?src["']?\s*:\s*["']([^"']+\.mp4)["']/i);
                 if (match) {
                     let videoUrl = match[1];
                     if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
@@ -141,9 +144,11 @@ const Extractors = {
                 const res = await axios.get(url, {
                     headers: { 'Referer': 'https://anime-sama.to/' }
                 });
-                const match = res.data.match(/<source\s+src=["']([^"']+)["']/i) || 
-                              res.data.match(/video_source\s*=\s*["']([^"']+)["']/i) ||
-                              res.data.match(/file\s*:\s*["']([^"']+)["']/i);
+                const html = res.data;
+                const match = html.match(/<source\s+src=["']([^"']+)["']/i) ||
+                    html.match(/video_source\s*=\s*["']([^"']+)["']/i) ||
+                    html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/["']?file["']?\s*,\s*["']([^"']+)["']/i);
                 if (match) {
                     let videoUrl = match[1];
                     if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
@@ -151,18 +156,18 @@ const Extractors = {
                         url: videoUrl,
                         quality: 'Auto',
                         source: 'Sendvid',
-                        headers: { 'Referer': url }
+                        headers: { 'Referer': url, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
                     });
                 }
             } catch (e) { }
         }
 
-        // Fallbacks for local / standard proxying
+        // Manual Extraction for Vidmoly
         if (url.includes('vidmoly')) {
             try {
                 let res = await axios.get(url, { headers: { 'Referer': 'https://anime-sama.to/' } });
                 let html = res.data;
-                
+
                 // Handle JS redirect (JWT protection)
                 const redirMatch = html.match(/window\.location\.replace\(['"]([^'"]+)['"]\)/i);
                 if (redirMatch) {
@@ -170,16 +175,17 @@ const Extractors = {
                     html = res.data;
                 }
 
-                const fileMatch = html.match(/file["']?\s*:\s*["']([^"']+)["']/i);
+                const fileMatch = html.match(/file["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/["']?sources["']?\s*:\s*\[\{["']?file["']?\s*:\s*["']([^"']+)["']/i);
                 if (fileMatch) {
                     return new StreamResult({
                         url: fileMatch[1],
                         quality: 'Auto',
                         source: 'Vidmoly',
-                        headers: { 'Referer': url }
+                        headers: { 'Referer': url, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
                     });
                 }
-            } catch(e) {}
+            } catch (e) { }
 
             return new StreamResult({
                 url: "MAGIC_PROXY_v1" + encodeBase64(url),
@@ -210,6 +216,7 @@ async function getHome(cb) {
     try {
         const response = await axios.get(baseUrl);
         const html = response.data;
+        if (!html || typeof html !== 'string') return cb({ success: false, message: "Impossible de récupérer la page d'accueil." });
 
         // Extract days blocks
         const dayBlocks = html.split(/<h2 class="titreJours[^>]*>/gi);
@@ -585,7 +592,7 @@ async function loadStreams(url, cb) {
         for (let i = 0; i < episodeStreams.length; i++) {
             const streamUrl = episodeStreams[i];
             let sourceName = "Lecteur " + (i + 1);
-            
+
             if (streamUrl.includes('sibnet')) sourceName = "Sibnet";
             else if (streamUrl.includes('sendvid')) sourceName = "Sendvid";
             else if (streamUrl.includes('vk.com')) sourceName = "VK";
