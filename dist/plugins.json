@@ -14,6 +14,16 @@
     "categories": [
       "Anime"
     ],
+    "domains": [
+      {
+        "name": "anime-sama.to",
+        "url": "https://anime-sama.to"
+      },
+      {
+        "name": "anime-sama.si",
+        "url": "https://anime-sama.si"
+      }
+    ],
     "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.animesama.sky"
   },
   {
@@ -51,23 +61,6 @@
     "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.animevostfr.sky"
   },
   {
-    "packageName": "com.gowaru.kaisen.franime",
-    "name": "FRAnime",
-    "version": 2,
-    "baseUrl": "https://franime.fr/",
-    "description": "FRAnime - Streaming anime VF & VOSTFR",
-    "authors": [
-      "Gowaru"
-    ],
-    "languages": [
-      "fr"
-    ],
-    "categories": [
-      "Anime"
-    ],
-    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.franime.sky"
-  },
-  {
     "packageName": "com.gowaru.kaisen.frenchanime",
     "name": "French-Anime",
     "version": 2,
@@ -83,23 +76,6 @@
       "Anime"
     ],
     "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.frenchanime.sky"
-  },
-  {
-    "packageName": "com.gowaru.kaisen.jetanimes",
-    "name": "JetAnimes",
-    "version": 2,
-    "baseUrl": "https://on.jetanimes.com",
-    "description": "JetAnimes - Streaming anime VF & VOSTFR",
-    "authors": [
-      "Gowaru"
-    ],
-    "languages": [
-      "fr"
-    ],
-    "categories": [
-      "Anime"
-    ],
-    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.jetanimes.sky"
   },
   {
     "packageName": "com.gowaru.kaisen.sekai",
