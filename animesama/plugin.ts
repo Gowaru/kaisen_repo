@@ -171,7 +171,19 @@ const Extractors = {
                 // Handle JS redirect (JWT protection)
                 const redirMatch = html.match(/window\.location\.replace\(['"]([^'"]+)['"]\)/i);
                 if (redirMatch) {
-                    res = await axios.get(redirMatch[1], { headers: { 'Referer': url } });
+                    let redirUrl = redirMatch[1];
+                    if (redirUrl.startsWith('?')) {
+                        redirUrl = url.split('?')[0] + redirUrl;
+                    } else if (redirUrl.startsWith('/')) {
+                        try {
+                            const urlObj = new URL(url);
+                            redirUrl = urlObj.origin + redirUrl;
+                        } catch(e) {
+                            if (url.includes('vidmoly.to')) redirUrl = 'https://vidmoly.to' + redirUrl;
+                            else redirUrl = 'https://vidmoly.net' + redirUrl;
+                        }
+                    }
+                    res = await axios.get(redirUrl, { headers: { 'Referer': url } });
                     html = res.data;
                 }
 
@@ -588,39 +600,51 @@ async function loadStreams(url, cb) {
             episodeStreams = [url];
         }
 
-        const results = [];
-        for (let i = 0; i < episodeStreams.length; i++) {
-            const streamUrl = episodeStreams[i];
-            let sourceName = "Lecteur " + (i + 1);
+        // Parallelize stream extraction to prevent timeouts
+        const promises = episodeStreams.map(async (streamUrl, i) => {
+            try {
+                let sourceName = "Lecteur " + (i + 1);
+                if (streamUrl.includes('sibnet')) sourceName = "Sibnet";
+                else if (streamUrl.includes('sendvid')) sourceName = "Sendvid";
+                else if (streamUrl.includes('vk.com')) sourceName = "VK";
+                else if (streamUrl.includes('dood')) sourceName = "DoodStream";
+                else if (streamUrl.includes('vidmoly')) sourceName = "Vidmoly";
+                else if (streamUrl.includes('mixdrop')) sourceName = "MixDrop";
+                else if (streamUrl.includes('streamtape')) sourceName = "StreamTape";
+                else if (streamUrl.includes('voe')) sourceName = "Voe";
+                else if (streamUrl.includes('filemoon')) sourceName = "Filemoon";
+                else if (streamUrl.includes('hubcloud') || streamUrl.includes('hd-runtv')) sourceName = "HubCloud";
+                else if (streamUrl.includes('embed4me')) sourceName = "Inne (Embed4me)";
 
-            if (streamUrl.includes('sibnet')) sourceName = "Sibnet";
-            else if (streamUrl.includes('sendvid')) sourceName = "Sendvid";
-            else if (streamUrl.includes('vk.com')) sourceName = "VK";
-            else if (streamUrl.includes('dood')) sourceName = "DoodStream";
-            else if (streamUrl.includes('vidmoly')) sourceName = "Vidmoly";
-            else if (streamUrl.includes('mixdrop')) sourceName = "MixDrop";
-            else if (streamUrl.includes('streamtape')) sourceName = "StreamTape";
-            else if (streamUrl.includes('voe')) sourceName = "Voe";
-            else if (streamUrl.includes('filemoon')) sourceName = "Filemoon";
-            else if (streamUrl.includes('hubcloud') || streamUrl.includes('hd-runtv')) sourceName = "HubCloud";
-            else if (streamUrl.includes('embed4me')) sourceName = "Inne (Embed4me)";
+                const extracted = await Extractors.resolveStream(streamUrl);
+                if (extracted) {
+                    extracted.source = sourceName;
+                    const resBatch = [extracted];
 
-            const extracted = await Extractors.resolveStream(streamUrl);
-            if (extracted) {
-                extracted.source = sourceName;
-                results.push(extracted);
-
-                // Only add a proxy version if the extracted URL is NOT already a proxy
-                if (!extracted.url.startsWith("MAGIC_PROXY_v1")) {
-                    const proxyStream = new StreamResult({
-                        url: "MAGIC_PROXY_v1" + encodeBase64(extracted.url),
-                        source: sourceName + " (Proxy)"
-                    });
-                    if (extracted.headers) proxyStream.headers = extracted.headers;
-                    else proxyStream.headers = { 'Referer': 'https://anime-sama.to/' };
-                    results.push(proxyStream);
+                    // Only add a proxy version if the extracted URL is NOT already a proxy
+                    if (!extracted.url.startsWith("MAGIC_PROXY_v1")) {
+                        const proxyStream = new StreamResult({
+                            url: "MAGIC_PROXY_v1" + encodeBase64(extracted.url),
+                            source: sourceName + " (Proxy)",
+                            quality: extracted.quality || 'Auto'
+                        });
+                        if (extracted.headers) proxyStream.headers = extracted.headers;
+                        else proxyStream.headers = { 'Referer': 'https://anime-sama.to/' };
+                        resBatch.push(proxyStream);
+                    }
+                    return resBatch;
                 }
+            } catch (err) {
+                console.log("Error extracting stream: " + err);
             }
+            return [];
+        });
+
+        const allResults = await Promise.all(promises);
+        const results = allResults.flat();
+
+        if (results.length === 0) {
+            return cb({ success: false, errorCode: "NO_STREAMS", message: "Aucune source n'a pu être extraite." });
         }
 
         cb({ success: true, data: results });
