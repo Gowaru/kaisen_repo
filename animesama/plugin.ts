@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { MixDrop, StreamTape, Voe, Filemoon, DoodExtractor } from 'skystream-extractors/dist/index.js';
+import { MixDrop, StreamTape, Voe, Filemoon, DoodExtractor, HubCloud } from 'skystream-extractors/dist/index.js';
 
 function encodeBase64(str) {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
@@ -102,6 +102,9 @@ const Extractors = {
             } else if (url.includes('dood')) {
                 const ex = new DoodExtractor();
                 extracted = await ex.getUrl(url);
+            } else if (url.includes('hubcloud') || url.includes('hd-runtv')) {
+                const ex = new HubCloud();
+                extracted = await ex.getUrl(url);
             }
 
             if (extracted && extracted.length > 0) {
@@ -135,7 +138,9 @@ const Extractors = {
         // Manual Extraction for Sendvid
         if (url.includes('sendvid.com')) {
             try {
-                const res = await axios.get(url);
+                const res = await axios.get(url, {
+                    headers: { 'Referer': 'https://anime-sama.to/' }
+                });
                 const match = res.data.match(/<source\s+src=["']([^"']+\.mp4)["']/i) || res.data.match(/video_source\s*=\s*["']([^"']+)["']/i);
                 if (match) {
                     return new StreamResult({
@@ -153,7 +158,7 @@ const Extractors = {
                 url: "MAGIC_PROXY_v1" + encodeBase64(url),
                 quality: 'Auto',
                 source: 'Vidmoly (Proxy)',
-                headers: { Referer: 'https://vidmoly.to/' }
+                headers: { 'Referer': 'https://vidmoly.to/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
             });
         }
 
@@ -312,10 +317,14 @@ async function search(query, cb) {
                 if (match[1].includes('/scan/')) continue;
 
                 let itemUrl = match[1].endsWith('/') ? match[1] : match[1] + '/';
-                if (!itemUrl.startsWith('http')) itemUrl = baseUrl + itemUrl;
+                if (!itemUrl.startsWith('http')) {
+                    itemUrl = baseUrl.replace(/\/$/, '') + '/' + itemUrl.replace(/^\//, '');
+                }
 
                 let posterUrl = match[2];
-                if (!posterUrl.startsWith('http')) posterUrl = baseUrl + posterUrl;
+                if (!posterUrl.startsWith('http')) {
+                    posterUrl = baseUrl.replace(/\/$/, '') + '/' + posterUrl.replace(/^\//, '');
+                }
 
                 let title = match[3].trim();
                 if (match[4] && match[4].trim()) {
@@ -559,6 +568,7 @@ async function loadStreams(url, cb) {
             else if (streamUrl.includes('streamtape')) sourceName = "StreamTape";
             else if (streamUrl.includes('voe')) sourceName = "Voe";
             else if (streamUrl.includes('filemoon')) sourceName = "Filemoon";
+            else if (streamUrl.includes('hubcloud') || streamUrl.includes('hd-runtv')) sourceName = "HubCloud";
             else if (streamUrl.includes('embed4me')) sourceName = "Inne (Embed4me)";
 
             const extracted = await Extractors.resolveStream(streamUrl);
