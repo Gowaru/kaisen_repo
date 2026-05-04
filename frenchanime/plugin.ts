@@ -1,5 +1,7 @@
-(function() {
-    const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://frenchanime.com';
+// @ts-nocheck
+import { MixDrop, StreamTape, Voe, Filemoon, DoodStream } from 'skystream-extractors';
+
+const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://frenchanime.com';
     const axios = {
         get: async (url, config = {}) => {
             const h = config.headers || {};
@@ -405,71 +407,37 @@
         } catch (e) { cb({ success: false, errorCode: "LOAD_ERROR", message: String(e) }); }
     }
 
+    
     const Extractors = {
-        async extractVidoza(url) {
-            try {
-                const res = await axios.get(url);
-                const match = res.data.match(/source\s+src=["'](https?:\/\/[^"']+\.mp4)["']/i);
-                if (match) return { url: match[1], quality: 'Auto', source: 'Vidoza' };
-            } catch (e) {} return null;
-        },
-        async extractSibnet(url) {
-            try {
-                const res = await axios.get(url);
-                const match = res.data.match(/player\.src\(\[\{src:\s*["']([^"']+)["']/i) || res.data.match(/src:\s*["'](\/v\/.*?\.mp4)["']/i);
-                if (match) {
-                    let videoUrl = match[1];
-                    if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
-                    else if (videoUrl.startsWith('/')) videoUrl = 'https://video.sibnet.ru' + videoUrl;
-                    return { url: videoUrl, quality: 'Auto', source: 'Sibnet', headers: { 'Referer': url } };
-                }
-            } catch (e) {} return null;
-        },
-        async extractSendvid(url) {
-            try {
-                const res = await axios.get(url);
-                const match = res.data.match(/<source\s+src=["']([^"']+\.mp4)["']/i) || res.data.match(/video_source\s*=\s*["']([^"']+)["']/i);
-                if (match) return { url: match[1], quality: 'Auto', source: 'Sendvid' };
-            } catch (e) {} return null;
-        },
-        async extractUqload(url) {
-            try {
-                const finalUrl = url.replace('uqload.bz', 'uqload.com'); 
-                const res = await axios.get(finalUrl, { headers: { 'Referer': 'https://uqload.com' } });
-                const match = res.data.match(/sources:\s*\["([^"]+)"\]/i);
-                if (match) return { url: match[1], quality: 'Auto', source: 'Uqload', headers: { 'Referer': 'https://uqload.com' } };
-            } catch (e) {} return null;
-        },
-        async extractVudeo(url) {
-            try {
-                const res = await axios.get(url);
-                const match = res.data.match(/sources:\s*\["([^"]+)"\]/i) || res.data.match(/src:\s*["']([^"']+\.mp4)["']/i);
-                if (match) return { url: match[1], quality: 'Auto', source: 'Vudeo' };
-            } catch (e) {} return null;
-        },
-        async extractVidmoly(url) {
-            try {
-                const res = await axios.get(url, { headers: { 'Referer': 'https://vidmoly.to/' } });
-                const match = res.data.match(/file:\s*["']([^"']+\.mp4)["']/i) || res.data.match(/file:\s*["']([^"']+\.m3u8[^"']*)["']/i);
-                if (match) return { url: match[1], quality: 'Auto', source: 'Vidmoly', headers: { 'Referer': 'https://vidmoly.to/' } };
-            } catch (e) {} return null;
-        },
-        async extractLuluvid(url) {
-            try {
-                const res = await axios.get(url);
-                const match = res.data.match(/file:\s*["']([^"']+\.mp4)["']/i) || res.data.match(/file:\s*["']([^"']+\.m3u8[^"']*)["']/i);
-                if (match) return { url: match[1], quality: 'Auto', source: 'Luluvid' };
-            } catch (e) {} return null;
-        },
         async resolveStream(url) {
+            if (!url) return null;
+            try {
+                let extracted = [];
+                if (url.includes('mixdrop')) {
+                    const ex = new MixDrop();
+                    extracted = await ex.getUrl(url);
+                } else if (url.includes('streamtape')) {
+                    const ex = new StreamTape();
+                    extracted = await ex.getUrl(url);
+                } else if (url.includes('voe')) {
+                    const ex = new Voe();
+                    extracted = await ex.getUrl(url);
+                } else if (url.includes('filemoon')) {
+                    const ex = new Filemoon();
+                    extracted = await ex.getUrl(url);
+                } else if (url.includes('dood')) {
+                    const ex = new DoodStream();
+                    extracted = await ex.getUrl(url);
+                }
+                
+                if (extracted && extracted.length > 0) {
+                    return extracted[0]; // return first stream or modify to return all
+                }
+            } catch (e) {}
+            
+            // Fallbacks for local / standard proxying
             let finalStream = null;
-            if (url.includes('vidoza')) finalStream = await this.extractVidoza(url);
-            else if (url.includes('sibnet')) finalStream = await this.extractSibnet(url);
-            else if (url.includes('sendvid')) finalStream = await this.extractSendvid(url);
-            else if (url.includes('uqload')) finalStream = await this.extractUqload(url);
-            else if (url.includes('vudeo')) finalStream = await this.extractVudeo(url);
-            else if (url.includes('vidmoly')) finalStream = await this.extractVidmoly(url);
-            else if (url.includes('luluvid')) finalStream = await this.extractLuluvid(url);
+            if (url.includes('vidmoly')) finalStream = { url: url, quality: 'Auto', source: 'Vidmoly', headers: { Referer: 'https://vidmoly.to/' } };
             
             if (finalStream) {
                 return new StreamResult({
@@ -477,8 +445,18 @@
                     headers: finalStream.headers || {}
                 });
             }
+            if (url.endsWith('.mp4') || url.endsWith('.m3u8')) {
+                let host = 'Unknown'; try { host = new URL(url).hostname; } catch(e) {}
+                return new StreamResult({ url: url, quality: 'Auto', source: host });
+            }
             
-            return null;
+            // Magic proxy for anything else
+            let host = 'Unknown'; try { host = new URL(url).hostname; } catch(e) {}
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + btoa(url),
+                quality: 'Auto',
+                source: host + " (Proxy)"
+            });
         }
     };
 
@@ -503,4 +481,3 @@
     }
 
     globalThis.getHome = getHome; globalThis.search = search; globalThis.load = load; globalThis.loadStreams = loadStreams;
-})();

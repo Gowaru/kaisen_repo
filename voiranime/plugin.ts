@@ -1,6 +1,7 @@
-(function() {
+// @ts-nocheck
+import { MixDrop, StreamTape, Voe, Filemoon, DoodStream } from 'skystream-extractors';
 
-    const axios = {
+const axios = {
         get: async (url, config = {}) => {
             const h = config.headers || {};
             if (typeof http_get !== 'undefined') {
@@ -54,7 +55,7 @@
     };
 
     
-    const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://voiranime.tv/';
+    const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://voir-anime.to';
     const headers = {
         'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
@@ -429,19 +430,51 @@
     async function loadStreams(url, cb) {
         try {
             const res = await axios.get(url, { headers });
-            const doc = await parseHtml(res.data);
+            // Using parseHtml native equivalent if available
+            const doc = typeof parse_html !== 'undefined' ? await parse_html(res.data) : await parseHtml(res.data);
             const streams = [];
 
-            const iframes = doc.querySelectorAll('iframe[src*="streamtape"], iframe[src*="vidoza"], iframe[src*="dood"], iframe[src*="embed"]');
+            const iframes = doc.querySelectorAll('iframe[src*="streamtape"], iframe[src*="vidoza"], iframe[src*="dood"], iframe[src*="embed"], iframe[src*="voe"], iframe[src*="filemoon"]');
             for (let iframe of iframes) {
                 let src = iframe?.getAttribute('src');
                 if (src.startsWith('//')) src = 'https:' + src;
                 
-                streams.push(new StreamResult({
-                    url: src,
-                    quality: '1080p',
-                    source: new URL(src).hostname
-                }));
+                try {
+                    let extracted = [];
+                    if (src.includes('mixdrop')) {
+                        const ex = new MixDrop();
+                        extracted = await ex.getUrl(src);
+                    } else if (src.includes('streamtape')) {
+                        const ex = new StreamTape();
+                        extracted = await ex.getUrl(src);
+                    } else if (src.includes('voe')) {
+                        const ex = new Voe();
+                        extracted = await ex.getUrl(src);
+                    } else if (src.includes('filemoon')) {
+                        const ex = new Filemoon();
+                        extracted = await ex.getUrl(src);
+                    } else if (src.includes('dood')) {
+                        const ex = new DoodStream();
+                        extracted = await ex.getUrl(src);
+                    }
+
+                    if (extracted && extracted.length > 0) {
+                        extracted.forEach(e => streams.push(new StreamResult(e)));
+                    } else {
+                        // Magic proxy fallback for unhandled extractors
+                        streams.push(new StreamResult({
+                            url: "MAGIC_PROXY_v1" + btoa(src),
+                            quality: '1080p',
+                            source: new URL(src).hostname + ' (Proxy)'
+                        }));
+                    }
+                } catch(err) {
+                    streams.push(new StreamResult({
+                        url: "MAGIC_PROXY_v1" + btoa(src),
+                        quality: '1080p',
+                        source: new URL(src).hostname + ' (Proxy)'
+                    }));
+                }
             };
 
             cb({ success: true, data: streams });
@@ -455,4 +488,3 @@
     globalThis.search = search;
     globalThis.load = load;
     globalThis.loadStreams = loadStreams;
-})();

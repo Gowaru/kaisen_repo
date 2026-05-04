@@ -2,7 +2,7 @@
 
         
     const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://jetanimes.com';
-const axios = {
+    const axios = {
         get: async (url, config = {}) => {
             const h = config.headers || {};
             if (typeof http_get !== 'undefined') {
