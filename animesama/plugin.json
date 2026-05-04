@@ -12,5 +12,15 @@
   ],
   "categories": [
     "Anime"
+  ],
+  "domains": [
+    {
+      "name": "anime-sama.to",
+      "url": "https://anime-sama.to"
+    },
+    {
+      "name": "anime-sama.si",
+      "url": "https://anime-sama.si"
+    }
   ]
 }

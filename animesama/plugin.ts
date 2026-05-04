@@ -27,6 +27,8 @@ const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://an
 const axios = {
     get: async (url, config = {}) => {
         const h = config.headers || {};
+        if (!h['User-Agent']) h['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+        
         if (typeof http_get !== 'undefined') {
             let r;
             try {
@@ -52,6 +54,8 @@ const axios = {
     },
     post: async (url, data, config = {}) => {
         const h = config.headers || {};
+        if (!h['User-Agent']) h['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+        
         if (typeof http_post !== 'undefined') {
             let r;
             try {
@@ -108,8 +112,12 @@ const Extractors = {
         // Manual Extraction for Sibnet
         if (url.includes('sibnet.ru')) {
             try {
-                const res = await axios.get(url);
-                const match = res.data.match(/player\.src\(\[\{src:\s*["']([^"']+)["']/i) || res.data.match(/src:\s*["'](\/v\/.*?\.mp4)["']/i);
+                const res = await axios.get(url, {
+                    headers: { 'Referer': 'https://anime-sama.to/' }
+                });
+                const match = res.data.match(/player\.src\(\[\{src:\s*["']([^"']+)["']/i) || 
+                              res.data.match(/src:\s*["'](\/v\/.*?\.mp4)["']/i) ||
+                              res.data.match(/["']?src["']?\s*:\s*["']([^"']+\.mp4)["']/i);
                 if (match) {
                     let videoUrl = match[1];
                     if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
@@ -118,7 +126,7 @@ const Extractors = {
                         url: videoUrl,
                         quality: 'Auto',
                         source: 'Sibnet',
-                        headers: { 'Referer': url }
+                        headers: { 'Referer': url, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
                     });
                 }
             } catch (e) { }
@@ -159,7 +167,8 @@ const Extractors = {
         return new StreamResult({
             url: "MAGIC_PROXY_v1" + encodeBase64(url),
             quality: 'Auto',
-            source: host + " (Proxy)"
+            source: host + " (Proxy)",
+            headers: { 'Referer': 'https://anime-sama.to/' }
         });
     }
 
@@ -421,22 +430,33 @@ async function load(url, cb) {
         const titleToSeasonNumber = {};
 
         // Fetch episodes for all seasons found
+        const seasonRequests = deduplicatedEntries.map(sEntry => {
+            let jsUrl = rootUrl + sEntry.path;
+            if (!jsUrl.endsWith('/')) jsUrl += '/';
+            return { url: jsUrl + 'episodes.js' };
+        });
+
+        let responses = [];
+        if (typeof http_parallel !== 'undefined' && seasonRequests.length > 1) {
+            responses = await http_parallel(seasonRequests);
+        } else {
+            for (const req of seasonRequests) {
+                const r = await axios.get(req.url);
+                responses.push({ body: typeof r.data === 'string' ? r.data : JSON.stringify(r.data) });
+            }
+        }
+
         for (let sIdx = 0; sIdx < deduplicatedEntries.length; sIdx++) {
             const sEntry = deduplicatedEntries[sIdx];
+            const jsData = responses[sIdx]?.body || "";
 
             let currentSeasonNumber = titleToSeasonNumber[sEntry.title];
             if (!currentSeasonNumber) {
                 currentSeasonNumber = baseSeasonNumber++;
                 titleToSeasonNumber[sEntry.title] = currentSeasonNumber;
             }
-            let jsUrl = rootUrl + sEntry.path;
-            if (!jsUrl.endsWith('/')) jsUrl += '/';
-            jsUrl += 'episodes.js';
 
             try {
-                const jsRes = await axios.get(jsUrl);
-                const jsData = jsRes.data;
-
                 const epsRegex = /var\s+eps\d+\s*=\s*\[([\s\S]*?)\]/gi;
                 let ematch;
                 const players = [];
@@ -528,12 +548,18 @@ async function loadStreams(url, cb) {
         const results = [];
         for (let i = 0; i < episodeStreams.length; i++) {
             const streamUrl = episodeStreams[i];
-            let sourceName = "Lecteur Anime-Sama " + (i + 1);
+            let sourceName = "Lecteur " + (i + 1);
+            
             if (streamUrl.includes('sibnet')) sourceName = "Sibnet";
             else if (streamUrl.includes('sendvid')) sourceName = "Sendvid";
             else if (streamUrl.includes('vk.com')) sourceName = "VK";
-            else if (streamUrl.includes('dood')) sourceName = "DoodExtractor";
+            else if (streamUrl.includes('dood')) sourceName = "DoodStream";
             else if (streamUrl.includes('vidmoly')) sourceName = "Vidmoly";
+            else if (streamUrl.includes('mixdrop')) sourceName = "MixDrop";
+            else if (streamUrl.includes('streamtape')) sourceName = "StreamTape";
+            else if (streamUrl.includes('voe')) sourceName = "Voe";
+            else if (streamUrl.includes('filemoon')) sourceName = "Filemoon";
+            else if (streamUrl.includes('embed4me')) sourceName = "Inne (Embed4me)";
 
             const extracted = await Extractors.resolveStream(streamUrl);
             if (extracted) {
@@ -547,13 +573,10 @@ async function loadStreams(url, cb) {
                         source: sourceName + " (Proxy)"
                     });
                     if (extracted.headers) proxyStream.headers = extracted.headers;
+                    else proxyStream.headers = { 'Referer': 'https://anime-sama.to/' };
                     results.push(proxyStream);
                 }
             }
-            // We REMOVED the unextracted iframe fallback intentionally. 
-            // The mobile app's ExoPlayer crashes on raw HTML pages unless strictly intercepted, 
-            // causing it to automatically fallback to Sibnet when Vidmoly is chosen.
-            // It is better to only show streams we can extract directly into mp4/m3u8.
         }
 
         cb({ success: true, data: results });
