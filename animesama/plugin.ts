@@ -141,12 +141,17 @@ const Extractors = {
                 const res = await axios.get(url, {
                     headers: { 'Referer': 'https://anime-sama.to/' }
                 });
-                const match = res.data.match(/<source\s+src=["']([^"']+\.mp4)["']/i) || res.data.match(/video_source\s*=\s*["']([^"']+)["']/i);
+                const match = res.data.match(/<source\s+src=["']([^"']+)["']/i) || 
+                              res.data.match(/video_source\s*=\s*["']([^"']+)["']/i) ||
+                              res.data.match(/file\s*:\s*["']([^"']+)["']/i);
                 if (match) {
+                    let videoUrl = match[1];
+                    if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
                     return new StreamResult({
-                        url: match[1],
+                        url: videoUrl,
                         quality: 'Auto',
-                        source: 'Sendvid'
+                        source: 'Sendvid',
+                        headers: { 'Referer': url }
                     });
                 }
             } catch (e) { }
@@ -154,6 +159,28 @@ const Extractors = {
 
         // Fallbacks for local / standard proxying
         if (url.includes('vidmoly')) {
+            try {
+                let res = await axios.get(url, { headers: { 'Referer': 'https://anime-sama.to/' } });
+                let html = res.data;
+                
+                // Handle JS redirect (JWT protection)
+                const redirMatch = html.match(/window\.location\.replace\(['"]([^'"]+)['"]\)/i);
+                if (redirMatch) {
+                    res = await axios.get(redirMatch[1], { headers: { 'Referer': url } });
+                    html = res.data;
+                }
+
+                const fileMatch = html.match(/file["']?\s*:\s*["']([^"']+)["']/i);
+                if (fileMatch) {
+                    return new StreamResult({
+                        url: fileMatch[1],
+                        quality: 'Auto',
+                        source: 'Vidmoly',
+                        headers: { 'Referer': url }
+                    });
+                }
+            } catch(e) {}
+
             return new StreamResult({
                 url: "MAGIC_PROXY_v1" + encodeBase64(url),
                 quality: 'Auto',
