@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { MixDrop, StreamTape, Voe, Filemoon, DoodStream } from 'skystream-extractors';
+import { MixDrop, StreamTape, Voe, Filemoon, DoodExtractor } from 'skystream-extractors';
 
 const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://vostfree.ws';
     const axios = {
@@ -257,7 +257,7 @@ const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://vo
                     const ex = new Filemoon();
                     extracted = await ex.getUrl(url);
                 } else if (url.includes('dood')) {
-                    const ex = new DoodStream();
+                    const ex = new DoodExtractor();
                     extracted = await ex.getUrl(url);
                 }
                 

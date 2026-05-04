@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { MixDrop, StreamTape, Voe, Filemoon, DoodStream } from 'skystream-extractors';
+import { MixDrop, StreamTape, Voe, Filemoon, DoodExtractor } from 'skystream-extractors';
 
 const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://anime-sama.to';
 const axios = {
@@ -67,7 +67,7 @@ const Extractors = {
                 const ex = new Filemoon();
                 extracted = await ex.getUrl(url);
             } else if (url.includes('dood')) {
-                const ex = new DoodStream();
+                const ex = new DoodExtractor();
                 extracted = await ex.getUrl(url);
             }
 
@@ -466,7 +466,7 @@ async function loadStreams(url, cb) {
             if (streamUrl.includes('sibnet')) sourceName = "Sibnet";
             else if (streamUrl.includes('sendvid')) sourceName = "Sendvid";
             else if (streamUrl.includes('vk.com')) sourceName = "VK";
-            else if (streamUrl.includes('dood')) sourceName = "DoodStream";
+            else if (streamUrl.includes('dood')) sourceName = "DoodExtractor";
             else if (streamUrl.includes('vidmoly')) sourceName = "Vidmoly";
 
             const extracted = await Extractors.resolveStream(streamUrl);

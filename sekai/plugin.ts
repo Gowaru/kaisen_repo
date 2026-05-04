@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { MixDrop, StreamTape, Voe, Filemoon, DoodStream } from 'skystream-extractors';
+import { MixDrop, StreamTape, Voe, Filemoon, DoodExtractor } from 'skystream-extractors';
 
 const axios = {
     get: async (url, config = {}) => {

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { MixDrop, StreamTape, Voe, Filemoon, DoodStream } from 'skystream-extractors';
+import { MixDrop, StreamTape, Voe, Filemoon, DoodExtractor } from 'skystream-extractors';
 
 const axios = {
         get: async (url, config = {}) => {
@@ -454,7 +454,7 @@ const axios = {
                         const ex = new Filemoon();
                         extracted = await ex.getUrl(src);
                     } else if (src.includes('dood')) {
-                        const ex = new DoodStream();
+                        const ex = new DoodExtractor();
                         extracted = await ex.getUrl(src);
                     }
 
