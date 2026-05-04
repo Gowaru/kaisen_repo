@@ -1,10 +1,33 @@
 // @ts-nocheck
 import { MixDrop, StreamTape, Voe, Filemoon, DoodExtractor } from 'skystream-extractors/dist/index.js';
 
+function encodeBase64(str) {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+    let output = "";
+    let i = 0;
+    str = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function (match, p1) {
+        return String.fromCharCode('0x' + p1);
+    });
+    while (i < str.length) {
+        let chr1 = str.charCodeAt(i++);
+        let chr2 = i < str.length ? str.charCodeAt(i++) : Number.NaN;
+        let chr3 = i < str.length ? str.charCodeAt(i++) : Number.NaN;
+        let enc1 = chr1 >> 2;
+        let enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+        let enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
+        let enc4 = chr3 & 63;
+        if (isNaN(chr2)) enc3 = enc4 = 64;
+        else if (isNaN(chr3)) enc4 = 64;
+        output += chars.charAt(enc1) + chars.charAt(enc2) + chars.charAt(enc3) + chars.charAt(enc4);
+    }
+    return output;
+}
+
 const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://vostfree.ws';
     const axios = {
         get: async (url, config = {}) => {
             const h = config.headers || {};
+
             if (typeof http_get !== 'undefined') {
                 const r = await http_get(url, h);
                 let parsed = r.body;
@@ -104,8 +127,7 @@ const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://vo
 
     async function search(query, cb) {
         try {
-            
-            
+
             const params = `do=search&subaction=search&story=${encodeURIComponent(query)}`;
             
             const response = await axios.post(`${baseUrl}/index.php?do=search`, params, {
@@ -237,8 +259,6 @@ const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://vo
         }
     }
 
-    
-    
     const Extractors = {
         async resolveStream(url) {
             if (!url) return null;
@@ -284,7 +304,7 @@ const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://vo
             // Magic proxy for anything else
             let host = 'Unknown'; try { host = new URL(url).hostname; } catch(e) {}
             return new StreamResult({
-                url: "MAGIC_PROXY_v1" + btoa(url),
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
                 quality: 'Auto',
                 source: host + " (Proxy)"
             });

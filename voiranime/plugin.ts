@@ -1,9 +1,32 @@
 // @ts-nocheck
 import { MixDrop, StreamTape, Voe, Filemoon, DoodExtractor } from 'skystream-extractors/dist/index.js';
 
+function encodeBase64(str) {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+    let output = "";
+    let i = 0;
+    str = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function (match, p1) {
+        return String.fromCharCode('0x' + p1);
+    });
+    while (i < str.length) {
+        let chr1 = str.charCodeAt(i++);
+        let chr2 = i < str.length ? str.charCodeAt(i++) : Number.NaN;
+        let chr3 = i < str.length ? str.charCodeAt(i++) : Number.NaN;
+        let enc1 = chr1 >> 2;
+        let enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+        let enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
+        let enc4 = chr3 & 63;
+        if (isNaN(chr2)) enc3 = enc4 = 64;
+        else if (isNaN(chr3)) enc4 = 64;
+        output += chars.charAt(enc1) + chars.charAt(enc2) + chars.charAt(enc3) + chars.charAt(enc4);
+    }
+    return output;
+}
+
 const axios = {
         get: async (url, config = {}) => {
             const h = config.headers || {};
+
             if (typeof http_get !== 'undefined') {
                 let r;
                 try {
@@ -54,7 +77,6 @@ const axios = {
         }
     };
 
-    
     const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://voir-anime.to';
     const headers = {
         'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36',
@@ -361,7 +383,6 @@ const axios = {
         }
     }
 
-    
     const Extractors = {
         async extractVidoza(url) {
             try {
@@ -463,14 +484,14 @@ const axios = {
                     } else {
                         // Magic proxy fallback for unhandled extractors
                         streams.push(new StreamResult({
-                            url: "MAGIC_PROXY_v1" + btoa(src),
+                            url: "MAGIC_PROXY_v1" + encodeBase64(src),
                             quality: '1080p',
                             source: new URL(src).hostname + ' (Proxy)'
                         }));
                     }
                 } catch(err) {
                     streams.push(new StreamResult({
-                        url: "MAGIC_PROXY_v1" + btoa(src),
+                        url: "MAGIC_PROXY_v1" + encodeBase64(src),
                         quality: '1080p',
                         source: new URL(src).hostname + ' (Proxy)'
                     }));

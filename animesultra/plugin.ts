@@ -1,9 +1,32 @@
 // @ts-nocheck
 import { MixDrop, StreamTape, Voe, Filemoon, DoodExtractor } from 'skystream-extractors/dist/index.js';
 
+function encodeBase64(str) {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+    let output = "";
+    let i = 0;
+    str = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function (match, p1) {
+        return String.fromCharCode('0x' + p1);
+    });
+    while (i < str.length) {
+        let chr1 = str.charCodeAt(i++);
+        let chr2 = i < str.length ? str.charCodeAt(i++) : Number.NaN;
+        let chr3 = i < str.length ? str.charCodeAt(i++) : Number.NaN;
+        let enc1 = chr1 >> 2;
+        let enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+        let enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
+        let enc4 = chr3 & 63;
+        if (isNaN(chr2)) enc3 = enc4 = 64;
+        else if (isNaN(chr3)) enc4 = 64;
+        output += chars.charAt(enc1) + chars.charAt(enc2) + chars.charAt(enc3) + chars.charAt(enc4);
+    }
+    return output;
+}
+
 const axios = {
         get: async (url, config = {}) => {
             const h = config.headers || {};
+
             if (typeof http_get !== 'undefined') {
                 const r = await http_get(url, h);
                 let parsed = r.body;
@@ -38,7 +61,6 @@ const axios = {
         return Array.from(doc.querySelectorAll(selector));
     }
 
-    
     async function getHome(cb) {
         try {
             const res = await axios.get(baseUrl, { headers });
@@ -257,7 +279,6 @@ const axios = {
                 }
             }
 
-
             const recommendations = [];
             const recBlocks = doc.querySelectorAll('.block_area');
             recBlocks.forEach((b) => {
@@ -346,7 +367,7 @@ const axios = {
             
             let host = 'Unknown'; try { host = new URL(url).hostname; } catch(e) {}
             return new StreamResult({
-                url: "MAGIC_PROXY_v1" + btoa(url),
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
                 quality: 'Auto',
                 source: host + " (Proxy)"
             });
@@ -417,7 +438,6 @@ const axios = {
                     const nameMatch = html.match(nameRegex);
                     if (nameMatch) serverName = nameMatch[1].trim();
 
-                    
                     const streamRes = await PluginExtractors.resolveStream(playerUrl);
                     if (streamRes) {
                         streamRes.quality = serverName;
