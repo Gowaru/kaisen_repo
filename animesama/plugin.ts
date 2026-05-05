@@ -222,8 +222,13 @@ const Extractors = {
                     });
                 }
             } catch (e) { }
-            // Vidmoly: if extraction failed, skip (don't proxy the HTML embed page)
-            return null;
+            // Vidmoly: extraction failed, fallback to proxy
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'Vidmoly',
+                headers: { 'Referer': 'https://anime-sama.to/' }
+            });
         }
 
         // --- Minochinos / Vidhide (P.A.C.K.E.R. obfuscated) ---
@@ -254,15 +259,23 @@ const Extractors = {
                     });
                 }
             } catch (e) { }
-            // If extraction failed, skip (don't proxy the HTML embed page)
-            return null;
+            // Extraction failed, fallback to proxy
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'Minochinos',
+                headers: { 'Referer': 'https://anime-sama.to/' }
+            });
         }
 
-        // --- Embed4Me / Lpayer (React SPA, hash-based routing) ---
-        // These are JavaScript SPAs that can't be scraped server-side.
-        // Skip them - the app cannot play HTML pages via MAGIC_PROXY.
+        // --- Embed4Me / Lpayer ---
         if (url.includes('embed4me') || url.includes('lpayer')) {
-            return null;
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'Embed4Me',
+                headers: { 'Referer': 'https://anime-sama.to/' }
+            });
         }
 
         // ──────────────────────────────────────────────────────────
@@ -278,10 +291,15 @@ const Extractors = {
         }
 
         // ──────────────────────────────────────────────────────────
-        // 5. Unknown host → return null instead of proxying HTML
-        //    MAGIC_PROXY_v1 can only proxy video files, not HTML pages
+        // 5. Unknown host → fallback to proxy
         // ──────────────────────────────────────────────────────────
-        return null;
+        let host = 'Unknown'; try { host = url.split('/')[2] || 'Unknown'; } catch (e) { }
+        return new StreamResult({
+            url: "MAGIC_PROXY_v1" + encodeBase64(url),
+            quality: 'Auto',
+            source: host,
+            headers: { 'Referer': 'https://anime-sama.to/' }
+        });
     }
 
 };
