@@ -231,6 +231,16 @@ const Extractors = {
             });
         }
 
+        // Manual Extraction for Embed4Me / Lpayer
+        if (url.includes('embed4me') || url.includes('lpayer')) {
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'Embed4Me (Proxy)',
+                headers: { 'Referer': 'https://anime-sama.to/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+            });
+        }
+
         if (url.endsWith('.mp4') || url.endsWith('.m3u8')) {
             let host = 'Unknown'; try { host = new URL(url).hostname; } catch (e) { }
             return new StreamResult({ url: url, quality: 'Auto', source: host });
@@ -654,7 +664,7 @@ async function loadStreams(url, cb) {
                             quality: extracted.quality || 'Auto'
                         });
                         if (extracted.headers) proxyStream.headers = extracted.headers;
-                        else proxyStream.headers = { 'Referer': 'https://anime-sama.to/' };
+                        else proxyStream.headers = { 'Referer': streamUrl, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' };
                         resBatch.push(proxyStream);
                     }
                     return resBatch;
