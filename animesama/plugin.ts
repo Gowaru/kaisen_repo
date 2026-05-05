@@ -88,172 +88,200 @@ const Extractors = {
 
     async resolveStream(url) {
         if (!url) return null;
+
+        // ──────────────────────────────────────────────────────────
+        // 1. Try the SkyStream built-in loadExtractor() first.
+        //    It handles many common hosts natively (MixDrop, Voe, etc.)
+        // ──────────────────────────────────────────────────────────
+        if (typeof loadExtractor !== 'undefined') {
+            try {
+                const streams = await loadExtractor(url);
+                if (streams && streams.length > 0) return streams[0];
+            } catch (e) { }
+        }
+
+        // ──────────────────────────────────────────────────────────
+        // 2. Fallback: try bundled skystream-extractors library
+        // ──────────────────────────────────────────────────────────
         try {
             let extracted = [];
             if (url.includes('mixdrop')) {
-                const ex = new MixDrop();
-                extracted = await ex.getUrl(url);
+                extracted = await new MixDrop().getUrl(url);
             } else if (url.includes('streamtape')) {
-                const ex = new StreamTape();
-                extracted = await ex.getUrl(url);
+                extracted = await new StreamTape().getUrl(url);
             } else if (url.includes('voe')) {
-                const ex = new Voe();
-                extracted = await ex.getUrl(url);
+                extracted = await new Voe().getUrl(url);
             } else if (url.includes('filemoon')) {
-                const ex = new Filemoon();
-                extracted = await ex.getUrl(url);
+                extracted = await new Filemoon().getUrl(url);
             } else if (url.includes('dood')) {
-                const ex = new DoodExtractor();
-                extracted = await ex.getUrl(url);
+                extracted = await new DoodExtractor().getUrl(url);
             } else if (url.includes('hubcloud') || url.includes('hd-runtv')) {
-                const ex = new HubCloud();
-                extracted = await ex.getUrl(url);
+                extracted = await new HubCloud().getUrl(url);
             }
-
             if (extracted && extracted.length > 0) {
                 return extracted[0];
             }
         } catch (e) { }
 
-        // Manual Extraction for Sibnet
+        // ──────────────────────────────────────────────────────────
+        // 3. Manual extraction for hosts not covered above
+        // ──────────────────────────────────────────────────────────
+
+        // --- Sibnet ---
         if (url.includes('sibnet.ru')) {
             try {
                 const res = await axios.get(url, {
-                    headers: { 'Referer': 'https://anime-sama.to/' }
+                    headers: { 'Referer': url }
                 });
-                const match = res.data.match(/player\.src\(\[\{src:\s*["']([^"']+)["']/i) ||
-                    res.data.match(/src:\s*["'](\/v\/.*?\.mp4)["']/i) ||
-                    res.data.match(/["']?src["']?\s*:\s*["']([^"']+\.mp4)["']/i);
-                if (match) {
-                    let videoUrl = match[1];
-                    if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
-                    else if (videoUrl.startsWith('/')) videoUrl = 'https://video.sibnet.ru' + videoUrl;
-                    return new StreamResult({
-                        url: videoUrl,
-                        quality: 'Auto',
-                        source: 'Sibnet',
-                        headers: { 'Referer': url, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
-                    });
+                if (typeof res.data === 'string') {
+                    const match = res.data.match(/player\.src\(\[\{src:\s*["']([^"']+)["']/i) ||
+                        res.data.match(/src:\s*["'](\/v\/.*?\.mp4)["']/i) ||
+                        res.data.match(/["']?src["']?\s*:\s*["']([^"']+\.mp4)["']/i);
+                    if (match) {
+                        let videoUrl = match[1];
+                        if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                        else if (videoUrl.startsWith('/')) videoUrl = 'https://video.sibnet.ru' + videoUrl;
+                        return new StreamResult({
+                            url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl),
+                            quality: 'Auto',
+                            source: 'Sibnet',
+                            headers: { 'Referer': url }
+                        });
+                    }
                 }
             } catch (e) { }
         }
 
-        // Manual Extraction for Sendvid
+        // --- Sendvid ---
         if (url.includes('sendvid.com')) {
             try {
                 const res = await axios.get(url, {
                     headers: { 'Referer': 'https://anime-sama.to/' }
                 });
-                const html = res.data;
-                const match = html.match(/<source\s+src=["']([^"']+)["']/i) ||
-                    html.match(/video_source\s*=\s*["']([^"']+)["']/i) ||
-                    html.match(/file\s*:\s*["']([^"']+)["']/i) ||
-                    html.match(/["']?file["']?\s*,\s*["']([^"']+)["']/i);
-                if (match) {
-                    let videoUrl = match[1];
-                    if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
-                    return new StreamResult({
-                        url: videoUrl,
-                        quality: 'Auto',
-                        source: 'Sendvid',
-                        headers: { 'Referer': url, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
-                    });
+                if (typeof res.data === 'string') {
+                    const match = res.data.match(/<source\s+src=["']([^"']+)["']/i) ||
+                        res.data.match(/video_source\s*=\s*["']([^"']+)["']/i) ||
+                        res.data.match(/file\s*:\s*["']([^"']+)["']/i);
+                    if (match) {
+                        let videoUrl = match[1];
+                        if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                        return new StreamResult({
+                            url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl),
+                            quality: 'Auto',
+                            source: 'Sendvid',
+                            headers: { 'Referer': url }
+                        });
+                    }
                 }
             } catch (e) { }
         }
 
-        // Manual Extraction for Vidmoly
+        // --- Vidmoly (JWT redirect + file extraction) ---
         if (url.includes('vidmoly')) {
             try {
                 let res = await axios.get(url, { headers: { 'Referer': 'https://anime-sama.to/' } });
-                let html = res.data;
+                let html = typeof res.data === 'string' ? res.data : '';
 
                 // Handle JS redirect (JWT protection)
                 const redirMatch = html.match(/window\.location\.replace\(['"]([^'"]+)['"]\)/i);
                 if (redirMatch) {
                     let redirUrl = redirMatch[1];
-                    if (redirUrl.startsWith('?')) {
-                        redirUrl = url.split('?')[0] + redirUrl;
-                    } else if (redirUrl.startsWith('/')) {
-                        try {
-                            const urlObj = new URL(url);
-                            redirUrl = urlObj.origin + redirUrl;
-                        } catch (e) {
-                            if (url.includes('vidmoly.to')) redirUrl = 'https://vidmoly.to' + redirUrl;
-                            else redirUrl = 'https://vidmoly.net' + redirUrl;
+                    // Reconstruct absolute URL from relative redirect
+                    if (!redirUrl.startsWith('http')) {
+                        const baseMatch = url.match(/(https?:\/\/[^\/]+)/);
+                        const origin = baseMatch ? baseMatch[1] : 'https://vidmoly.to';
+                        if (redirUrl.startsWith('?')) {
+                            redirUrl = url.split('?')[0] + redirUrl;
+                        } else if (redirUrl.startsWith('/')) {
+                            redirUrl = origin + redirUrl;
+                        } else {
+                            redirUrl = origin + '/' + redirUrl;
                         }
                     }
                     res = await axios.get(redirUrl, { headers: { 'Referer': url } });
-                    html = res.data;
+                    html = typeof res.data === 'string' ? res.data : '';
                 }
 
-                const fileMatch = html.match(/file["']?\s*:\s*["']([^"']+)["']/i) ||
-                    html.match(/["']?sources["']?\s*:\s*\[\{["']?file["']?\s*:\s*["']([^"']+)["']/i);
+                // Try getAndUnpack for packed JS
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try {
+                        const unpacked = getAndUnpack(html);
+                        if (unpacked) html = html + '\n' + unpacked;
+                    } catch (e) { }
+                }
+
+                const fileMatch = html.match(/file\s*:\s*"(https?:\/\/[^"]+)"/i) ||
+                    html.match(/sources\s*:\s*\[\{[^}]*file\s*:\s*"(https?:\/\/[^"]+)"/i);
                 if (fileMatch) {
+                    const videoUrl = fileMatch[1];
                     return new StreamResult({
-                        url: fileMatch[1],
+                        url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl),
                         quality: 'Auto',
                         source: 'Vidmoly',
-                        headers: { 'Referer': url, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+                        headers: { 'Referer': url }
                     });
                 }
             } catch (e) { }
-
-            return new StreamResult({
-                url: "MAGIC_PROXY_v1" + encodeBase64(url),
-                quality: 'Auto',
-                source: 'Vidmoly (Proxy)',
-                headers: { 'Referer': 'https://vidmoly.to/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
-            });
+            // Vidmoly: if extraction failed, skip (don't proxy the HTML embed page)
+            return null;
         }
 
-        // Manual Extraction for Minochinos / Vidhide clones
+        // --- Minochinos / Vidhide (P.A.C.K.E.R. obfuscated) ---
         if (url.includes('minochinos') || url.includes('vidhide') || url.includes('vidhidepre')) {
             try {
-                let res = await axios.get(url, { headers: { 'Referer': 'https://anime-sama.to/' } });
-                let html = res.data;
-                const fileMatch = html.match(/file["']?\s*:\s*["']([^"']+)["']/i) ||
-                    html.match(/["']?sources["']?\s*:\s*\[\{["']?file["']?\s*:\s*["']([^"']+)["']/i);
+                const res = await axios.get(url, { headers: { 'Referer': 'https://anime-sama.to/' } });
+                let html = typeof res.data === 'string' ? res.data : '';
+
+                // Use native getAndUnpack() to deobfuscate P.A.C.K.E.R. packed JS
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try {
+                        const unpacked = getAndUnpack(html);
+                        if (unpacked) html = html + '\n' + unpacked;
+                    } catch (e) { }
+                }
+
+                // Search for direct video URL (must be https://...  not a relative path)
+                const fileMatch = html.match(/file\s*:\s*"(https?:\/\/[^"]+)"/i) ||
+                    html.match(/sources\s*:\s*\[\{[^}]*file\s*:\s*"(https?:\/\/[^"]+)"/i) ||
+                    html.match(/<source\s+src=["'](https?:\/\/[^"']+)["']/i);
                 if (fileMatch) {
+                    const videoUrl = fileMatch[1];
                     return new StreamResult({
-                        url: fileMatch[1],
+                        url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl),
                         quality: 'Auto',
                         source: 'Minochinos',
-                        headers: { 'Referer': url, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' }
+                        headers: { 'Referer': url }
                     });
                 }
             } catch (e) { }
-            return new StreamResult({
-                url: "MAGIC_PROXY_v1" + encodeBase64(url),
-                quality: 'Auto',
-                source: 'Minochinos (Proxy)',
-                headers: { 'Referer': url, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' }
-            });
+            // If extraction failed, skip (don't proxy the HTML embed page)
+            return null;
         }
 
-        // Manual Extraction for Embed4Me / Lpayer
+        // --- Embed4Me / Lpayer (React SPA, hash-based routing) ---
+        // These are JavaScript SPAs that can't be scraped server-side.
+        // Skip them - the app cannot play HTML pages via MAGIC_PROXY.
         if (url.includes('embed4me') || url.includes('lpayer')) {
+            return null;
+        }
+
+        // ──────────────────────────────────────────────────────────
+        // 4. Direct video file URLs → proxy with headers
+        // ──────────────────────────────────────────────────────────
+        if (url.match(/\.(mp4|m3u8|mkv|webm)(\?|$)/i)) {
             return new StreamResult({
                 url: "MAGIC_PROXY_v1" + encodeBase64(url),
                 quality: 'Auto',
-                source: 'Embed4Me (Proxy)',
-                headers: { 'Referer': 'https://anime-sama.to/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' }
+                source: 'Direct',
+                headers: { 'Referer': 'https://anime-sama.to/' }
             });
         }
 
-        if (url.endsWith('.mp4') || url.endsWith('.m3u8')) {
-            let host = 'Unknown'; try { host = new URL(url).hostname; } catch (e) { }
-            return new StreamResult({ url: url, quality: 'Auto', source: host });
-        }
-
-        // Magic proxy for anything else (Unknown iframes)
-        let host = 'Unknown'; try { host = new URL(url).hostname; } catch (e) { }
-        return new StreamResult({
-            url: "MAGIC_PROXY_v1" + encodeBase64(url),
-            quality: 'Auto',
-            source: host + " (Proxy)",
-            headers: { 'Referer': 'https://anime-sama.to/' }
-        });
+        // ──────────────────────────────────────────────────────────
+        // 5. Unknown host → return null instead of proxying HTML
+        //    MAGIC_PROXY_v1 can only proxy video files, not HTML pages
+        // ──────────────────────────────────────────────────────────
+        return null;
     }
 
 };
@@ -648,30 +676,16 @@ async function loadStreams(url, cb) {
                 else if (streamUrl.includes('voe')) sourceName = "Voe";
                 else if (streamUrl.includes('filemoon')) sourceName = "Filemoon";
                 else if (streamUrl.includes('hubcloud') || streamUrl.includes('hd-runtv')) sourceName = "HubCloud";
-                else if (streamUrl.includes('minochinos')) sourceName = "Minochinos";
-                else if (streamUrl.includes('embed4me')) sourceName = "Inne (Embed4me)";
+                else if (streamUrl.includes('minochinos') || streamUrl.includes('vidhide')) sourceName = "Minochinos";
+                else if (streamUrl.includes('embed4me') || streamUrl.includes('lpayer')) sourceName = "Embed4Me";
 
                 const extracted = await Extractors.resolveStream(streamUrl);
                 if (extracted) {
-                    extracted.source = sourceName;
-                    const resBatch = [extracted];
-
-                    // Only add a proxy version if the extracted URL is NOT already a proxy
-                    if (!extracted.url.startsWith("MAGIC_PROXY_v1")) {
-                        const proxyStream = new StreamResult({
-                            url: "MAGIC_PROXY_v1" + encodeBase64(extracted.url),
-                            source: sourceName + " (Proxy)",
-                            quality: extracted.quality || 'Auto'
-                        });
-                        if (extracted.headers) proxyStream.headers = extracted.headers;
-                        else proxyStream.headers = { 'Referer': streamUrl, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' };
-                        resBatch.push(proxyStream);
-                    }
-                    return resBatch;
+                    // Set the source name on the result
+                    if (!extracted.source) extracted.source = sourceName;
+                    return [extracted];
                 }
-            } catch (err) {
-                console.log("Error extracting stream: " + err);
-            }
+            } catch (err) { }
             return [];
         });
 
