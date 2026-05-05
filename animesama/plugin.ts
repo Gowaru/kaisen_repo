@@ -208,7 +208,7 @@ const Extractors = {
         }
 
         // Manual Extraction for Minochinos / Vidhide clones
-        if (url.includes('minochinos') || url.includes('vidhide')) {
+        if (url.includes('minochinos') || url.includes('vidhide') || url.includes('vidhidepre')) {
             try {
                 let res = await axios.get(url, { headers: { 'Referer': 'https://anime-sama.to/' } });
                 let html = res.data;
@@ -219,7 +219,7 @@ const Extractors = {
                         url: fileMatch[1],
                         quality: 'Auto',
                         source: 'Minochinos',
-                        headers: { 'Referer': url, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+                        headers: { 'Referer': url, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' }
                     });
                 }
             } catch (e) { }
@@ -227,7 +227,7 @@ const Extractors = {
                 url: "MAGIC_PROXY_v1" + encodeBase64(url),
                 quality: 'Auto',
                 source: 'Minochinos (Proxy)',
-                headers: { 'Referer': url, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+                headers: { 'Referer': url, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' }
             });
         }
 
@@ -237,7 +237,7 @@ const Extractors = {
                 url: "MAGIC_PROXY_v1" + encodeBase64(url),
                 quality: 'Auto',
                 source: 'Embed4Me (Proxy)',
-                headers: { 'Referer': 'https://anime-sama.to/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+                headers: { 'Referer': 'https://anime-sama.to/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' }
             });
         }
 
@@ -664,7 +664,7 @@ async function loadStreams(url, cb) {
                             quality: extracted.quality || 'Auto'
                         });
                         if (extracted.headers) proxyStream.headers = extracted.headers;
-                        else proxyStream.headers = { 'Referer': streamUrl, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' };
+                        else proxyStream.headers = { 'Referer': streamUrl, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' };
                         resBatch.push(proxyStream);
                     }
                     return resBatch;
