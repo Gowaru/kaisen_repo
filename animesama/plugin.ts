@@ -178,7 +178,7 @@ const Extractors = {
                         try {
                             const urlObj = new URL(url);
                             redirUrl = urlObj.origin + redirUrl;
-                        } catch(e) {
+                        } catch (e) {
                             if (url.includes('vidmoly.to')) redirUrl = 'https://vidmoly.to' + redirUrl;
                             else redirUrl = 'https://vidmoly.net' + redirUrl;
                         }
@@ -204,6 +204,30 @@ const Extractors = {
                 quality: 'Auto',
                 source: 'Vidmoly (Proxy)',
                 headers: { 'Referer': 'https://vidmoly.to/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+            });
+        }
+
+        // Manual Extraction for Minochinos / Vidhide clones
+        if (url.includes('minochinos') || url.includes('vidhide')) {
+            try {
+                let res = await axios.get(url, { headers: { 'Referer': 'https://anime-sama.to/' } });
+                let html = res.data;
+                const fileMatch = html.match(/file["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/["']?sources["']?\s*:\s*\[\{["']?file["']?\s*:\s*["']([^"']+)["']/i);
+                if (fileMatch) {
+                    return new StreamResult({
+                        url: fileMatch[1],
+                        quality: 'Auto',
+                        source: 'Minochinos',
+                        headers: { 'Referer': url, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+                    });
+                }
+            } catch (e) { }
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'Minochinos (Proxy)',
+                headers: { 'Referer': url, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
             });
         }
 
@@ -614,6 +638,7 @@ async function loadStreams(url, cb) {
                 else if (streamUrl.includes('voe')) sourceName = "Voe";
                 else if (streamUrl.includes('filemoon')) sourceName = "Filemoon";
                 else if (streamUrl.includes('hubcloud') || streamUrl.includes('hd-runtv')) sourceName = "HubCloud";
+                else if (streamUrl.includes('minochinos')) sourceName = "Minochinos";
                 else if (streamUrl.includes('embed4me')) sourceName = "Inne (Embed4me)";
 
                 const extracted = await Extractors.resolveStream(streamUrl);
