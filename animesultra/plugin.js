@@ -88,6 +88,8 @@ const headers = {
     'Origin': baseUrl
 };
 
+function fixUrl(p) { if (!p) return ''; if (p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; }
+
 const PluginExtractors = {
 
     async resolveStream(url) {
@@ -312,7 +314,6 @@ async function getHome(cb) {
         const results = {};
         const queryAll = (d, s) => Array.from(d.querySelectorAll(s));
         const seenUrls = new Set();
-        const fixUrl = p => { if (!p) return ''; if (p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; };
 
         // Helper: extract items from a flw-item element
         function extractFlwItem(el) {
@@ -435,7 +436,7 @@ async function search(query, cb) {
                     items.push(new MultimediaItem({
                         title,
                         url: url.startsWith('http') ? url : baseUrl + url,
-                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl),
+                        posterUrl: fixUrl(posterUrl),
                         type: 'anime', playbackPolicy: 'none'
                     }));
                 }
@@ -475,31 +476,38 @@ function getDubStatusFromPageUrl(pageUrl) {
         return undefined;
     }
 
-// Detect if the current version is VF or VOSTFR and try to find the alternative
-function findAlternativeVersion(url) {
-        const lowerUrl = url.toLowerCase();
+// Detect if the current version is VF or VOSTFR and try to find the alternative from the page HTML
+function findAlternativeVersionFromPage(html, currentUrl) {
+        const lowerUrl = currentUrl.toLowerCase();
         let currentVersion = null;
         let alternativeUrl = null;
-        let alternativeLabel = null;
 
-        // Detect current version from URL pattern
         if (/\/vostfr|[-_]vostfr/i.test(lowerUrl)) {
             currentVersion = 'VOSTFR';
-            // Try to construct VF URL: replace vostfr with vf in the path
-            alternativeUrl = url.replace(/(\/anime[-_]vostfr\/)/i, '/anime-vf/')
-                .replace(/[-_]vostfr([-_])/gi, '-vf$1')
-                .replace(/[-_]vostfr\.html/i, '-vf.html');
-            alternativeLabel = 'Disponible en VF';
         } else if (/\/vf|[-_]vf(?!o)/i.test(lowerUrl)) {
             currentVersion = 'VF';
-            // Try to construct VOSTFR URL: replace vf with vostfr in the path
-            alternativeUrl = url.replace(/(\/anime[-_]vf\/)/i, '/anime-vostfr/')
-                .replace(/[-_]vf([-_\.])/gi, '-vostfr$1')
-                .replace(/[-_]vf\.html/i, '-vostfr.html');
-            alternativeLabel = 'Disponible en VOSTFR';
+        }
+        if (!currentVersion) return { currentVersion: null, alternativeUrl: null };
+
+        // Extract the anime name from the current URL slug to match the correct alternative
+        const slugMatch = currentUrl.match(/\/\d+-([\w-]+)\.html/i);
+        let animeKey = slugMatch ? slugMatch[1].toLowerCase() : '';
+        // Strip known suffixes to get core anime name
+        animeKey = animeKey.replace(/[-_](vf|vostfr|dll|au)$/gi, '').replace(/[-_](vf|vostfr|dll|au)$/gi, '');
+
+        // Search the raw HTML for a link to the alternative version of the SAME anime
+        if (animeKey && typeof html === 'string') {
+            const regex = currentVersion === 'VOSTFR'
+                ? new RegExp('href=["\']([^"\']*\\/anime[-_]vf\\/\\d+-[^"]*' + animeKey + '[^"\']*)["\']', 'gi')
+                : new RegExp('href=["\']([^"\']*\\/anime[-_]vostfr\\/\\d+-[^"]*' + animeKey + '[^"\']*)["\']', 'gi');
+            const m = regex.exec(html);
+            if (m && m[1]) {
+                const href = m[1];
+                alternativeUrl = href.startsWith('http') ? href : baseUrl + (href.startsWith('/') ? '' : '/') + href;
+            }
         }
 
-        return { currentVersion, alternativeUrl, alternativeLabel };
+        return { currentVersion, alternativeUrl };
     }
 
 async function load(url, cb) {
@@ -520,11 +528,12 @@ async function load(url, cb) {
             doc.querySelector('.ani_description .text')?.textContent.trim() ||
             doc.querySelector('meta[property="og:description"]')?.getAttribute('content');
         // Poster: try film-poster-img with data-src (lazy-loaded), then src, then og:image
-        const posterUrl = doc.querySelector('.film-poster-img')?.getAttribute('data-src') ||
+        const rawPoster = doc.querySelector('.film-poster-img')?.getAttribute('data-src') ||
             doc.querySelector('.film-poster-img')?.getAttribute('src') ||
             doc.querySelector('.film-poster img')?.getAttribute('data-src') ||
             doc.querySelector('.film-poster img')?.getAttribute('src') ||
             doc.querySelector('meta[property="og:image"]')?.getAttribute('content');
+        const posterUrl = fixUrl(rawPoster);
         // Metadata: year, genres, status from anisc-info and fd-infor
         const yearEl = doc.querySelector('.fdi-item.fdi-year a, .fdi-year a');
         const year = yearEl ? parseInt(yearEl.textContent.trim()) : undefined;
@@ -606,8 +615,8 @@ async function load(url, cb) {
                 }
             }
         }
-        // Detect alternative VF/VOSTFR version and fetch its episodes to merge
-        const { currentVersion, alternativeUrl } = findAlternativeVersion(url);
+        // Detect alternative VF/VOSTFR version from page links and fetch its episodes to merge
+        const { currentVersion, alternativeUrl } = findAlternativeVersionFromPage(html, url);
         if (alternativeUrl) {
             const fullAltUrl = alternativeUrl.startsWith('http') ? alternativeUrl : baseUrl + alternativeUrl;
             try {
