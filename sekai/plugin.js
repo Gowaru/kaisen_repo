@@ -247,19 +247,26 @@ async function load(url, cb) {
         const html = pageRes.data;
         const doc = await parseHtml(html);
 
-        const title = doc.querySelector('title')?.textContent.replace('Sekai', '').trim();
+        const title = doc.querySelector('title')?.textContent?.replace('Sekai', '')?.trim();
         // Description: try multiple selectors
         const description = doc.querySelector('.Description, .description, .series-description')?.textContent.trim() ||
-            doc.querySelector('.entry-content')?.textContent.trim() ||
+            doc.querySelector('.entry-content p')?.textContent.trim() ||
+            doc.querySelector('article p')?.textContent.trim() ||
             doc.querySelector('meta[property="og:description"]')?.getAttribute('content') ||
             doc.querySelector('meta[name="description"]')?.getAttribute('content');
-        // Poster: try multiple selectors
-        const posterImg = doc.querySelector('.Series img, .poster img, .cover img');
-        const posterUrl = posterImg?.getAttribute('src') || posterImg?.getAttribute('data-src') ||
+        // Poster: try multiple selectors with data-src first (lazy-loaded)
+        const posterImg = doc.querySelector('.Series img, .poster img, .cover img, figure img, .TPostBg');
+        const rawPoster = posterImg?.getAttribute('src') || posterImg?.getAttribute('data-src') ||
             doc.querySelector('meta[property="og:image"]')?.getAttribute('content');
-        // Extract metadata: year (from title or page)
-        const yearMatch = html.match(/\b(\d{4})\b/);
+        const posterUrl = rawPoster ? (rawPoster.startsWith('http') ? rawPoster : baseUrl + (rawPoster.startsWith('/') ? '' : '/') + rawPoster) : '';
+        // Extract metadata: year (from page text, avoid generic 4-digit matches)
+        const yearMatch = html.match(/Ann[eé]e\s*:?\s*(\d{4})/i) || html.match(/year["']?\s*:?\s*["']?(\d{4})/i) || html.match(/Premi[eè]re\s*:?\s*(\d{4})/i);
         const year = yearMatch ? parseInt(yearMatch[1]) : undefined;
+        // Genres
+        const genreEls = Array.from(doc.querySelectorAll('.sgenerx a, .genre a, .genres a, .category a, .Tags a')).map(el => el.textContent.trim()).filter(Boolean);
+        // Score
+        const scoreEl = doc.querySelector('.score, [class*="rating"], [class*="score"]');
+        const score = scoreEl?.textContent ? parseFloat(scoreEl.textContent.replace(/[^\d.]/g, '')) || undefined : undefined;
 
         // Extract episode count from external episodesData.js
         let epCount = 1;
@@ -300,7 +307,9 @@ async function load(url, cb) {
                 posterUrl,
                 type: 'anime',
                 episodes,
-                year
+                year,
+                score,
+                genres: genreEls.length > 0 ? genreEls : undefined
             })
         });
     } catch (e) {

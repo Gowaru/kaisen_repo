@@ -216,6 +216,12 @@ async function getHome(cb) {
         const seenUrls = new Set();
         const fixUrl = p => { if (!p) return ''; if (p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; };
 
+        // Helper to extract poster from an element
+        const getPoster = el => {
+            const imgEl = el.querySelector('img');
+            return fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src'));
+        };
+
         // ── 1. Top 10 Animes sidebar ──
         const top10 = [];
         queryAll(doc, '.TPost.A, .Wdgt .TPost').forEach(el => {
@@ -233,7 +239,7 @@ async function getHome(cb) {
                     top10.push(new MultimediaItem({
                         title: (rank ? rank + ' ' : '') + title,
                         url: fullUrl,
-                        posterUrl: fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src')),
+                        posterUrl: getPoster(el),
                         type: 'anime'
                     }));
                 }
@@ -241,89 +247,109 @@ async function getHome(cb) {
         });
         if (top10.length > 0) results['Top 10 Animes'] = top10;
 
-        // ── 2. Episodes by headings (VOSTFR/VF) ──
+        // ── 2. TPostMv items (Derniers Animes with posters) ──
+        const latestAnime = [];
+        queryAll(doc, '.TPostMv').forEach(el => {
+            const linkEl = el.querySelector('a');
+            const titleEl = el.querySelector('.TPMvCn .anmt, .TPMvCn h3, .Title');
+            const imgEl = el.querySelector('img');
+            const title = titleEl?.textContent.trim() || imgEl?.getAttribute('alt');
+            const url = linkEl?.getAttribute('href');
+            if (title && url) {
+                const fullUrl = url.startsWith('http') ? url : baseUrl + url;
+                if (!seenUrls.has(fullUrl)) {
+                    seenUrls.add(fullUrl);
+                    latestAnime.push(new MultimediaItem({
+                        title, url: fullUrl, posterUrl: getPoster(el), type: 'anime'
+                    }));
+                }
+            }
+        });
+        if (latestAnime.length > 0) results['Derniers Animes'] = latestAnime;
+
+        // ── 3. Episodes by headings (VOSTFR/VF) ──
         queryAll(doc, 'h2, h3, h4').forEach(heading => {
             const sectionTitle = heading.textContent.trim();
             if (!sectionTitle || sectionTitle.length < 2) return;
+            if (results[sectionTitle]) return; // skip if already extracted
             let container = heading.nextElementSibling;
             if (!container) container = heading.parentElement;
             if (!container) return;
             const items = [];
-            queryAll(container, '.episode-item, .TPostMv').forEach(el => {
-                const linkEl = el.querySelector('a');
-                const titleEl = el.querySelector('.episode-link, .TPMvCn .anmt, h3, h4');
-                const imgEl = el.querySelector('img');
-                const title = titleEl?.textContent.trim();
+            queryAll(container, '.episode-item').forEach(el => {
+                const linkEl = el.querySelector('.episode-link') || el.querySelector('a');
+                const title = linkEl?.textContent.trim();
                 const url = linkEl?.getAttribute('href');
-                const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
                 if (title && url) {
                     const fullUrl = url.startsWith('http') ? url : baseUrl + url;
                     if (!seenUrls.has(fullUrl)) {
                         seenUrls.add(fullUrl);
                         items.push(new MultimediaItem({
-                            title, url: fullUrl, posterUrl: fixUrl(posterUrl), type: 'anime'
+                            title, url: fullUrl, posterUrl: '', type: 'anime'
                         }));
                     }
                 }
             });
-            if (items.length > 0 && !results[sectionTitle]) results[sectionTitle] = items;
+            if (items.length > 0) results[sectionTitle] = items;
         });
 
-        // ── 3. Derniers Films ──
+        // ── 4. Derniers Films ──
         const filmItems = [];
-        queryAll(doc, 'a[href*="/film/"]').forEach(el => {
-            const url = el.getAttribute('href');
-            const imgEl = el.querySelector('img');
-            const titleEl = el.querySelector('.Title, h3');
-            const title = titleEl?.textContent.trim() || imgEl?.getAttribute('alt');
-            if (title && url && !url.includes('#')) {
+        queryAll(doc, '.TPost.C').forEach(el => {
+            const linkEl = el.querySelector('a');
+            const titleEl = el.querySelector('.Title');
+            const url = linkEl?.getAttribute('href');
+            const title = titleEl?.textContent.trim();
+            if (title && url && url.includes('/film/')) {
                 const fullUrl = url.startsWith('http') ? url : baseUrl + url;
                 if (!seenUrls.has(fullUrl)) {
                     seenUrls.add(fullUrl);
                     filmItems.push(new MultimediaItem({
-                        title, url: fullUrl, posterUrl: fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src')), type: 'anime'
+                        title, url: fullUrl, posterUrl: getPoster(el), type: 'anime'
                     }));
                 }
             }
         });
         if (filmItems.length > 0) results['Films'] = filmItems;
 
-        // ── 4. Dernières Saisons ──
+        // ── 5. Dernières Saisons ──
         const seasonItems = [];
-        queryAll(doc, 'a[href*="/saison/"]').forEach(el => {
-            const url = el.getAttribute('href');
-            const imgEl = el.querySelector('img');
-            const titleEl = el.querySelector('.Title, h3');
-            const title = titleEl?.textContent.trim() || imgEl?.getAttribute('alt');
-            if (title && url && !url.includes('#')) {
+        queryAll(doc, '.TPost.C').forEach(el => {
+            const linkEl = el.querySelector('a');
+            const titleEl = el.querySelector('.Title');
+            const url = linkEl?.getAttribute('href');
+            const title = titleEl?.textContent.trim();
+            if (title && url && url.includes('/saison/')) {
                 const fullUrl = url.startsWith('http') ? url : baseUrl + url;
                 if (!seenUrls.has(fullUrl)) {
                     seenUrls.add(fullUrl);
                     seasonItems.push(new MultimediaItem({
-                        title, url: fullUrl, posterUrl: fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src')), type: 'anime'
+                        title, url: fullUrl, posterUrl: getPoster(el), type: 'anime'
                     }));
                 }
             }
         });
         if (seasonItems.length > 0) results['Dernières Saisons'] = seasonItems;
 
-        // ── 5. Fallback ──
+        // ── 6. Fallback: TPost.C items not yet categorized ──
         if (Object.keys(results).length === 0) {
-            const epsItems = [];
-            queryAll(doc, '.episode-item').forEach(el => {
-                const linkEl = el.querySelector('.episode-link') || el.querySelector('a');
-                const title = linkEl?.textContent.trim();
+            const fallbackItems = [];
+            queryAll(doc, '.TPost.C, .TPostMv').forEach(el => {
+                const linkEl = el.querySelector('a');
+                const titleEl = el.querySelector('.Title, .TPMvCn .anmt, h3');
+                const title = titleEl?.textContent.trim();
                 const url = linkEl?.getAttribute('href');
-                const imgEl = el.querySelector('img');
                 if (title && url) {
                     const fullUrl = url.startsWith('http') ? url : baseUrl + url;
                     if (!seenUrls.has(fullUrl)) {
                         seenUrls.add(fullUrl);
-                        epsItems.push(new MultimediaItem({ title, url: fullUrl, posterUrl: fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src')), type: 'anime' }));
+                        fallbackItems.push(new MultimediaItem({
+                            title, url: fullUrl, posterUrl: getPoster(el), type: 'anime'
+                        }));
                     }
                 }
             });
-            if (epsItems.length > 0) results['Derniers Épisodes'] = epsItems;
+            if (fallbackItems.length > 0) results['Derniers Ajouts'] = fallbackItems;
         }
 
         cb({ success: true, data: results });
@@ -406,28 +432,36 @@ async function load(url, cb) {
         const res = await axios.get(url, { headers });
         const html = res.data;
         const doc = await parseHtml(html);
-        const title = doc.querySelector('.film-name, .Title, h1.Title')?.textContent.trim() || doc.querySelector('h1')?.textContent.trim();
-        // Description: try multiple selectors (Toroplay4 theme patterns)
+        const title = doc.querySelector('h1.Title')?.textContent.trim() || doc.querySelector('.Title')?.textContent.trim() || doc.querySelector('h1')?.textContent.trim();
+        // Description: try multiple selectors (TMovie/Toroplay4 theme patterns)
         const description = doc.querySelector('.Description')?.textContent.trim() ||
+            doc.querySelector('.entry-content p')?.textContent.trim() ||
+            doc.querySelector('article p')?.textContent.trim() ||
             doc.querySelector('.description')?.textContent.trim() ||
-            doc.querySelector('.entry-content')?.textContent.trim() ||
-            doc.querySelector('.film-description')?.textContent.trim() ||
             doc.querySelector('meta[name="description"]')?.getAttribute('content') ||
             doc.querySelector('meta[property="og:description"]')?.getAttribute('content');
-        // Poster: try multiple selectors with data-src first (lazy-loaded)
-        const posterUrl = doc.querySelector('.film-poster-img')?.getAttribute('data-src') ||
-            doc.querySelector('.film-poster-img')?.getAttribute('src') ||
-            doc.querySelector('.post-thumbnail img')?.getAttribute('src') ||
+        // Poster: .Image img is the main poster on detail pages
+        const posterUrl = doc.querySelector('.Image img')?.getAttribute('data-src') ||
             doc.querySelector('.Image img')?.getAttribute('src') ||
+            doc.querySelector('.film-poster-img')?.getAttribute('data-src') ||
+            doc.querySelector('.film-poster-img')?.getAttribute('src') ||
+            doc.querySelector('.TPostBg')?.getAttribute('src') ||
             doc.querySelector('meta[property="og:image"]')?.getAttribute('content');
-        // Extract metadata: year, genres, status
-        const yearEl = doc.querySelector('.Date, .year, .Year');
-        const yearFromEl = yearEl ? parseInt(yearEl.textContent.match(/\d{4}/)?.[0] || '0') : undefined;
+        // Extract metadata: year, genres, status from .Info div
+        const infoEl = doc.querySelector('.Info');
+        const infoText = infoEl?.textContent || '';
+        const yearFromInfo = infoText.match(/(\d{4})/)?.[1];
         const yearMatch = html.match(/Ann[eé]e\s*:?\s*(\d{4})/i) || html.match(/year["']?\s*:?\s*["']?(\d{4})/i);
-        const year = yearFromEl || (yearMatch ? parseInt(yearMatch[1]) : undefined);
-        const genreEls = Array.from(doc.querySelectorAll('.genre a, .genres a, .category a, .sgenerx a, .Category a, .Tags a')).map(el => el.textContent.trim()).filter(Boolean);
+        const year = yearFromInfo ? parseInt(yearFromInfo) : (yearMatch ? parseInt(yearMatch[1]) : undefined);
+        // Genres: try genre links, category links, or tags
+        const genreEls = Array.from(doc.querySelectorAll('.sgenerx a, .genre a, .genres a, .category a, .Category a, .Tags a')).map(el => el.textContent.trim()).filter(Boolean);
+        // Status: try selector first, then regex fallback
         const statusEl = doc.querySelector('.Status, .status, .statut, [class*="status"], [class*="Status"]');
-        const status = statusEl?.textContent.trim().toLowerCase();
+        let status = statusEl?.textContent?.trim()?.toLowerCase();
+        if (!status) {
+            const statusMatch = html.match(/Production\s*:?\s*(Oui|Yes|Non|No|En cours|Terminé|Finished)/i);
+            if (statusMatch) status = statusMatch[1].toLowerCase();
+        }
         const episodes = [];
         // Detect page-level dubStatus from URL/title
         const pageDubStatus = detectDubStatus(url, title);

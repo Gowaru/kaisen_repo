@@ -419,18 +419,22 @@ async function load(url, cb) {
             doc.querySelector('meta[name="description"]')?.getAttribute('content') ||
             doc.querySelector('meta[property="og:description"]')?.getAttribute('content');
         // Poster: try .slide-poster img, then .movie-poster img, then og:image
-        const posterUrl = doc.querySelector('.slide-poster img')?.getAttribute('src') ||
+        const rawPoster = doc.querySelector('.slide-poster img')?.getAttribute('src') ||
             doc.querySelector('.movie-poster img')?.getAttribute('src') ||
+            doc.querySelector('.slide-info img')?.getAttribute('src') ||
             doc.querySelector('meta[property="og:image"]')?.getAttribute('content');
+        const posterUrl = fixUrl(rawPoster);
         // Extract metadata: year, genres, rating
         const yearEl = doc.querySelector('.slide-info p');
         const yearFromSlide = yearEl ? parseInt(yearEl.textContent.match(/\d{4}/)?.[0] || '0') : undefined;
         const yearMatch = html.match(/Ann[eé]e\s*:?\s*(\d{4})/i);
         const year = yearFromSlide || (yearMatch ? parseInt(yearMatch[1]) : undefined);
-        const genreEls = Array.from(doc.querySelectorAll('.slide-top a, .genre a, .genres a, .category a, .short-tag a')).map(el => el.textContent.trim()).filter(Boolean);
-        const ratingEl = doc.querySelector('.rating, .ratig-layer, [class*="ratig"]');
-        const rawScore = ratingEl ? parseFloat(ratingEl.textContent.replace(/[^\d.]/g, '')) || undefined : undefined;
+        const genreEls = Array.from(doc.querySelectorAll('.slide-top a, .genre a, .genres a, .category a, .short-tag a, .sgenerx a')).map(el => el.textContent.trim()).filter(Boolean);
+        const ratingEl = doc.querySelector('.rating, .ratig-layer, [class*="ratig"], [class*="rating"]');
+        const rawScore = ratingEl?.textContent ? parseFloat(ratingEl.textContent.replace(/[^\d.]/g, '')) || undefined : undefined;
         const score = rawScore && rawScore <= 10 ? rawScore : undefined;
+        const statusEl = doc.querySelector('.Status, .status, .statut, [class*="status"], [class*="Status"]');
+        const status = statusEl?.textContent?.trim()?.toLowerCase();
         const episodes = [];
         // DLE episode patterns - option elements and links
         const epRegex = /<option value=["']([^"']+)["'][^>]*>(.*?)<\/option>/gi;
@@ -526,7 +530,7 @@ async function load(url, cb) {
             }
         });
 
-        cb({ success: true, data: new MultimediaItem({ type: "anime", title, description, posterUrl, episodes, year, score, genres: genreEls.length > 0 ? genreEls : undefined, recommendations: recommendations.length > 0 ? recommendations : undefined }) });
+        cb({ success: true, data: new MultimediaItem({ type: "anime", title, description, posterUrl, episodes, year, score, status, genres: genreEls.length > 0 ? genreEls : undefined, recommendations: recommendations.length > 0 ? recommendations : undefined }) });
     } catch (e) { log('load error: ' + url, e); cb({ success: false, errorCode: 'LOAD_ERROR', message: String(e) }); }
 }
 

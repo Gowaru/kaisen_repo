@@ -379,7 +379,7 @@ async function load(url, cb) {
         const year = yearFromEl || (yearMatch ? parseInt(yearMatch[1]) : undefined);
         const genreEls = Array.from(doc.querySelectorAll('.genres-content a, .wp-manga-genre a, .tag-summary a, .summary-content a[href*="genre"]')).map(el => el.textContent.trim()).filter(Boolean);
         const statusEl = doc.querySelector('.post-status .summary-content, .post-status .genres-content');
-        const status = statusEl?.textContent.trim().toLowerCase();
+        const status = statusEl?.textContent?.trim()?.toLowerCase();
         // Extract score from .score element
         const scoreEl = doc.querySelector('.score.font-meta.total_votes');
         const parsedScore = scoreEl ? parseFloat(scoreEl.textContent.trim()) : NaN;
