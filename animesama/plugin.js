@@ -26,6 +26,9 @@ function encodeBase64(str) {
     return output;
 }
 
+const PLUGIN_ID = 'animesama';
+function log(msg, data) { try { console.log(`[${PLUGIN_ID}] ${msg}`, data || ''); } catch (_) { } }
+
 const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://anime-sama.to';
 const axios = {
     get: async (url, config = {}) => {
@@ -310,27 +313,82 @@ async function getHome(cb) {
         const html = response.data;
         if (!html || typeof html !== 'string') return cb({ success: false, message: "Impossible de récupérer la page d'accueil." });
 
-        // Extract days blocks
-        const dayBlocks = html.split(/<h2 class="titreJours[^>]*>/gi);
-        // The first element is before any day, let's process it for "Dernières Sorties"
-
         const data = {};
+        const seenURLs = new Set();
 
-        // We iterate through all day blocks, starting from 1
+        // Helper: normalize a catalogue URL to its root
+        function toRootUrl(url) {
+            if (!url.startsWith('http')) url = url.startsWith('/') ? baseUrl + url : baseUrl + '/' + url;
+            const rootMatch = url.match(/(https?:\/\/[^\/]+\/catalogue\/[^\/]+)/);
+            return rootMatch ? rootMatch[1] + '/' : url;
+        }
+
+        // ──────────────────────────────────────────────────────────
+        // 1. CAROUSEL / À la Une
+        // ──────────────────────────────────────────────────────────
+        const carouselItems = [];
+        // Split HTML into slide blocks by ak-slide divs
+        const slideParts = html.split(/<div[^>]*class="[^"]*\bak-slide\b[^"]*"[^>]*>/gi);
+        for (let si = 1; si < slideParts.length; si++) {
+            const block = slideParts[si];
+            // Must contain ak-slide-title (skip cloned/empty slides)
+            const titleM = block.match(/<h2[^>]*class="ak-slide-title"[^>]*>([^<]+)<\/h2>/i);
+            if (!titleM) continue;
+            const title = titleM[1].trim();
+            // Poster: try ak-slide-bg img first, then construct from title slug
+            const bgM = block.match(/ak-slide-bg[\s\S]*?<img[^>]+src="([^"]+)"/i);
+            let posterUrl = bgM ? bgM[1] : '';
+            if (!posterUrl || posterUrl.includes('flag_') || posterUrl.includes('flag-')) {
+                // Construct poster from title slug (anime-sama convention)
+                const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+                posterUrl = baseUrl + '/img/contenu/' + slug + '.jpg';
+            }
+            if (posterUrl && !posterUrl.startsWith('http')) posterUrl = baseUrl + posterUrl;
+            // Description from ak-slide-synopsis
+            const synM = block.match(/ak-slide-synopsis[^>]*>([\s\S]*?)<\/p>/i);
+            const description = synM ? synM[1].replace(/<[^>]+>/g, '').trim() : '';
+            // CTA link (prefer VOSTFR)
+            const ctaBlock = block.match(/ak-slide-ctas[\s\S]*$/i);
+            let ctaUrl = '';
+            if (ctaBlock) {
+                const ctaLinks = [...ctaBlock[0].matchAll(/href="([^"]+)"/gi)];
+                for (const cl of ctaLinks) {
+                    if (cl[1].includes('/catalogue/')) {
+                        ctaUrl = cl[1];
+                        if (cl[1].includes('vostfr')) break;
+                    }
+                }
+            }
+            if (ctaUrl) {
+                const rootUrl = toRootUrl(ctaUrl);
+                if (!seenURLs.has(rootUrl)) {
+                    seenURLs.add(rootUrl);
+                    carouselItems.push(new MultimediaItem({
+                        title: title,
+                        url: rootUrl,
+                        posterUrl: posterUrl,
+                        description: description,
+                        type: "anime"
+                    }));
+                }
+            }
+        }
+        if (carouselItems.length > 0) data['À la Une'] = carouselItems;
+
+        // ──────────────────────────────────────────────────────────
+        // 2. DAILY RELEASES (jour par jour)
+        // ──────────────────────────────────────────────────────────
+        const dayBlocks = html.split(/<h2 class="titreJours[^>]*>/gi);
         for (let i = 1; i < dayBlocks.length; i++) {
             const block = dayBlocks[i];
-
-            // Extract the day title
             const dayTitleMatch = block.match(/<\/svg>[\s\S]*?<\/a>\s*([^\s<][^<]+)\s*<a/i);
             if (!dayTitleMatch) continue;
             const dayTitle = dayTitleMatch[1].trim();
 
             const items = [];
-            // Regex to catch cards with VOSTFR or VF indicators inside the block
             const regex = /<div class="[^"]*(Anime|Scan)[^"]*(VF|VOSTFR)?[^"]*"[\s\S]*?<a[^>]+href="([^"]*\/catalogue\/[^"]+)"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"[\s\S]*?alt="([^"]+)"/gi;
-
             let match;
-            const seenURLs = new Set();
+            const daySeen = new Set();
             while ((match = regex.exec(block)) !== null) {
                 if (match[1] && match[1].toLowerCase() === 'scan') continue;
 
@@ -344,25 +402,13 @@ async function getHome(cb) {
                 else if (url.includes('/vf/')) title += ' (VF)';
                 else if (url.includes('/vostfr/')) title += ' (VOSTFR)';
 
-                if (!url.startsWith('http')) {
-                    if (url.startsWith('/')) url = baseUrl + url;
-                    else url = baseUrl + '/' + url;
-                }
-
-                let baseItemUrl = url;
-                // Keep only root catalogue url to fetch description correctly in load()
-                const rootMatch = url.match(/(https?:\/\/[^\/]+\/catalogue\/[^\/]+)/);
-                if (rootMatch) baseItemUrl = rootMatch[1] + '/';
-
+                const baseItemUrl = toRootUrl(url);
                 const uniqueKey = baseItemUrl + "_" + lang;
 
-                if (!seenURLs.has(uniqueKey)) {
-                    seenURLs.add(uniqueKey);
-
-                    if (!posterUrl.startsWith('http')) {
-                        posterUrl = baseUrl + posterUrl;
-                    }
-
+                if (!daySeen.has(uniqueKey)) {
+                    daySeen.add(uniqueKey);
+                    seenURLs.add(baseItemUrl);
+                    if (!posterUrl.startsWith('http')) posterUrl = baseUrl + posterUrl;
                     items.push(new MultimediaItem({
                         title: title,
                         url: baseItemUrl,
@@ -371,40 +417,100 @@ async function getHome(cb) {
                     }));
                 }
             }
-
-            if (items.length > 0) {
-                // Determine day, if "Mardi", make sure it comes nicely. We put it in the map.
-                data[dayTitle] = items;
-            }
+            if (items.length > 0) data[dayTitle] = items;
         }
 
-        // If no days were processed (format change), fallback to the original latest logic for "Dernières Sorties"
+        // ──────────────────────────────────────────────────────────
+        // 3. SCANS / MANGA
+        // ──────────────────────────────────────────────────────────
+        const scanItems = [];
+        const scanRegex = /<div[^>]*class="[^"]*scan-card-premium[^"]*"[^>]*>[\s\S]*?<a[^>]+href="([^"]+)"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"[^>]*alt="([^"]+)"[\s\S]*?<\/a>[\s\S]*?<\/div>/gi;
+        let scanMatch;
+        while ((scanMatch = scanRegex.exec(html)) !== null && scanItems.length < 20) {
+            let url = scanMatch[1];
+            let posterUrl = scanMatch[2];
+            let title = scanMatch[3].trim();
+
+            const baseItemUrl = toRootUrl(url);                if (!seenURLs.has(baseItemUrl)) {
+                    seenURLs.add(baseItemUrl);
+                    if (!posterUrl.startsWith('http')) posterUrl = baseUrl + posterUrl;
+                    scanItems.push(new MultimediaItem({
+                    title: title + ' (Scan)',
+                    url: baseItemUrl,
+                    posterUrl: posterUrl,
+                    type: "anime"
+                }));
+            }
+        }
+        if (scanItems.length > 0) data['Scans / Manga'] = scanItems;
+
+        // ──────────────────────────────────────────────────────────
+        // 4. VF ANIME (hors day blocks)
+        // ──────────────────────────────────────────────────────────
+        const vfItems = [];
+        const vfRegex = /<div[^>]*class="[^"]*anime-card-premium[^"]*Anime\s+VF[^"]*"[^>]*>[\s\S]*?<a[^>]+href="([^"]+)"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"[^>]*alt="([^"]+)"[\s\S]*?<\/a>[\s\S]*?<\/div>/gi;
+        let vfMatch;
+        while ((vfMatch = vfRegex.exec(html)) !== null && vfItems.length < 20) {
+            let url = vfMatch[1];
+            let posterUrl = vfMatch[2];
+            let title = vfMatch[3].trim();
+
+            const baseItemUrl = toRootUrl(url);                if (!seenURLs.has(baseItemUrl)) {
+                    seenURLs.add(baseItemUrl);
+                    if (!posterUrl.startsWith('http')) posterUrl = baseUrl + posterUrl;
+                    vfItems.push(new MultimediaItem({
+                    title: title + ' (VF)',
+                    url: baseItemUrl,
+                    posterUrl: posterUrl,
+                    type: "anime"
+                }));
+            }
+        }
+        if (vfItems.length > 0) data['Anime VF'] = vfItems;
+
+        // ──────────────────────────────────────────────────────────
+        // 5. VOSTFR ANIME (hors day blocks)
+        // ──────────────────────────────────────────────────────────
+        const vostfrItems = [];
+        const vostfrRegex = /<div[^>]*class="[^"]*anime-card-premium[^"]*Anime\s+VOSTFR[^"]*"[^>]*>[\s\S]*?<a[^>]+href="([^"]+)"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"[^>]*alt="([^"]+)"[\s\S]*?<\/a>[\s\S]*?<\/div>/gi;
+        let vostfrMatch;
+        while ((vostfrMatch = vostfrRegex.exec(html)) !== null && vostfrItems.length < 20) {
+            let url = vostfrMatch[1];
+            let posterUrl = vostfrMatch[2];
+            let title = vostfrMatch[3].trim();
+
+            const baseItemUrl = toRootUrl(url);                if (!seenURLs.has(baseItemUrl)) {
+                    seenURLs.add(baseItemUrl);
+                    if (!posterUrl.startsWith('http')) posterUrl = baseUrl + posterUrl;
+                    vostfrItems.push(new MultimediaItem({
+                    title: title + ' (VOSTFR)',
+                    url: baseItemUrl,
+                    posterUrl: posterUrl,
+                    type: "anime"
+                }));
+            }
+        }
+        if (vostfrItems.length > 0) data['Anime VOSTFR'] = vostfrItems;
+
+        // ──────────────────────────────────────────────────────────
+        // 6. FALLBACK: if nothing was parsed, try generic catalogue links
+        // ──────────────────────────────────────────────────────────
         if (Object.keys(data).length === 0) {
             const items = [];
             const regex = /<a[^>]+href="([^"]*\/catalogue\/[^"]+)"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"[\s\S]*?alt="([^"]+)"/gi;
             let match;
             let count = 0;
-            const seenURLs = new Set();
-
             while ((match = regex.exec(html)) !== null && count < 15) {
                 let url = match[1];
-                if (url.includes('/scan/')) continue; // Skip scans
-
-                if (!url.startsWith('http')) {
-                    if (url.startsWith('/')) url = baseUrl + url;
-                    else url = baseUrl + '/' + url;
-                }
-
-                let baseItemUrl = url;
-                const rootMatch = url.match(/(https?:\/\/[^\/]+\/catalogue\/[^\/]+)/);
-                if (rootMatch) baseItemUrl = rootMatch[1] + '/';
-
+                if (url.includes('/scan/')) continue;
+                const baseItemUrl = toRootUrl(url);
                 if (!seenURLs.has(baseItemUrl)) {
                     seenURLs.add(baseItemUrl);
+                    let posterUrl = match[2].startsWith('http') ? match[2] : baseUrl + match[2];
                     items.push(new MultimediaItem({
                         title: match[3].trim(),
                         url: baseItemUrl,
-                        posterUrl: match[2].startsWith('http') ? match[2] : baseUrl + match[2],
+                        posterUrl: posterUrl,
                         type: "anime"
                     }));
                     count++;
@@ -413,13 +519,9 @@ async function getHome(cb) {
             data["Dernières Sorties"] = items;
         }
 
-        cb({
-            success: true,
-            data: data
-        });
+        cb({ success: true, data: data });
     } catch (e) {
-        cb({ success: false, errorCode: "PARSE_ERROR", message: String(e) });
-    }
+        log('getHome error', e); cb({ success: false, errorCode: 'PARSE_ERROR', message: String(e) }); }
 }
 
 
@@ -496,7 +598,7 @@ async function search(query, cb) {
 
         cb({ success: true, data: results });
     } catch (e) {
-        cb({ success: false, errorCode: "SEARCH_ERROR", message: String(e) });
+        log('search error', e); cb({ success: false, errorCode: 'SEARCH_ERROR', message: String(e) });
     }
 }
 
@@ -557,7 +659,7 @@ async function load(url, cb) {
         }
 
         if (seasonEntries.length === 0) {
-            return cb({ success: false, message: "Auncun épisode animé trouvé. Il s'agit peut-être d'un scan..." });
+            return cb({ success: false, message: "Aucun épisode animé trouvé. Il s'agit peut-être d'un scan..." });
         }
 
         const eps = [];
@@ -650,7 +752,7 @@ async function load(url, cb) {
         }
 
         if (eps.length === 0) {
-            return cb({ success: false, errorCode: "EPISODES_NOT_FOUND", message: "Impossible de parser les liens." });
+            return cb({ success: false, errorCode: 'EPISODES_NOT_FOUND', message: 'Impossible de parser les liens.' });
         }
 
         cb({
@@ -665,7 +767,7 @@ async function load(url, cb) {
             })
         });
     } catch (e) {
-        cb({ success: false, errorCode: "LOAD_ERROR", message: String(e.message) });
+        log('load error: ' + url, e); cb({ success: false, errorCode: 'LOAD_ERROR', message: String(e.message) });
     }
 }
 
@@ -711,12 +813,12 @@ async function loadStreams(url, cb) {
         const results = allResults.flat();
 
         if (results.length === 0) {
-            return cb({ success: false, errorCode: "NO_STREAMS", message: "Aucune source n'a pu être extraite." });
+            return cb({ success: false, errorCode: 'NO_STREAMS', message: "Aucune source n'a pu être extraite." });
         }
 
         cb({ success: true, data: results });
     } catch (e) {
-        cb({ success: false, errorCode: "STREAM_ERROR", message: String(e) });
+        log('loadStreams error: ' + url, e); cb({ success: false, errorCode: 'STREAM_ERROR', message: String(e) });
     }
 }
 

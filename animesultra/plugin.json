@@ -3,6 +3,10 @@
   "name": "AnimesUltra",
   "version": 2,
   "baseUrl": "https://ww.animesultra.org",
+  "domains": [
+    { "name": "ww.animesultra.org", "url": "https://ww.animesultra.org" },
+    { "name": "animesultra.net", "url": "https://animesultra.net" }
+  ],
   "description": "AnimesUltra - Streaming anime VF & VOSTFR",
   "authors": [
     "Gowaru"

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { MixDrop, StreamTape, Voe, Filemoon, DoodExtractor } from 'skystream-extractors/dist/index.js';
+// skystream-extractors not needed: sekai builds direct MP4 URLs from mu variables
 
 function encodeBase64(str) {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
@@ -27,7 +27,22 @@ const axios = {
     get: async (url, config = {}) => {
         const h = config.headers || {};
         if (typeof http_get !== 'undefined') {
-            const r = await http_get(url, h);
+            let r;
+            try {
+                r = await http_get(url, h);
+            } catch (e) {
+                r = { status: 403, body: 'cloudflare' };
+            }
+            if (r.status === 403 || r.status === 503 || (typeof r.body === 'string' && (r.body.includes('Just a moment') || r.body.toLowerCase().includes('cloudflare') || r.body.includes('Challenge Validation')))) {
+                if (typeof solveCaptcha !== 'undefined') {
+                    await solveCaptcha('cloudflare', url);
+                    try {
+                        r = await http_get(url, h);
+                    } catch (e) {
+                        r = { status: 500, body: "" };
+                    }
+                }
+            }
             let parsed = r.body;
             try { parsed = JSON.parse(r.body); } catch (e) { }
             return { data: parsed, status: r.status };
@@ -37,7 +52,22 @@ const axios = {
     post: async (url, data, config = {}) => {
         const h = config.headers || {};
         if (typeof http_post !== 'undefined') {
-            const r = await http_post(url, h, data);
+            let r;
+            try {
+                r = await http_post(url, h, data);
+            } catch (e) {
+                r = { status: 403, body: 'cloudflare' };
+            }
+            if (r.status === 403 || r.status === 503 || (typeof r.body === 'string' && (r.body.includes('Just a moment') || r.body.toLowerCase().includes('cloudflare') || r.body.includes('Challenge Validation')))) {
+                if (typeof solveCaptcha !== 'undefined') {
+                    await solveCaptcha('cloudflare', url);
+                    try {
+                        r = await http_post(url, h, data);
+                    } catch (e) {
+                        r = { status: 500, body: "" };
+                    }
+                }
+            }
             let parsed = r.body;
             try { parsed = JSON.parse(r.body); } catch (e) { }
             return { data: parsed, status: r.status };
@@ -45,6 +75,9 @@ const axios = {
         return { data: "" };
     }
 };
+
+const PLUGIN_ID = 'sekai';
+function log(msg, data) { try { console.log(`[${PLUGIN_ID}] ${msg}`, data || ''); } catch (_) { } }
 
 const baseUrl = typeof manifest !== 'undefined' ? manifest.baseUrl : 'https://sekai.fr';
 const headers = {
@@ -60,59 +93,62 @@ async function getHome(cb) {
         const res = await axios.get(baseUrl + '/?v=15', { headers });
         const html = res.data;
         const doc = await parseHtml(html);
-        const items = [];
+        const results = {};
+        const seenUrls = new Set();
 
+        // Featured from swiper slides
+        const featured = [];
         const slides = Array.from(doc.querySelectorAll('.swiper-slide'));
         slides.forEach(slide => {
             const link = slide.querySelector('a');
             if (!link) return;
             const href = link.getAttribute('href');
             const titleEl = slide.querySelector('.series-name');
+            const descEl = slide.querySelector('.swiper-description');
             const title = titleEl ? titleEl.textContent.trim() : (link.getAttribute('title') || link.textContent.trim());
+            const description = descEl?.querySelector('p')?.textContent.trim();
             const imgEl = slide.querySelector('img');
             const posterUrl = imgEl ? (imgEl.getAttribute('src') || imgEl.getAttribute('data-src')) : '';
-
             if (href && !href.startsWith('http') && !href.startsWith('/') && href !== 'android' && href !== 'contact') {
-                items.push(new MultimediaItem({
-                    title: (title || href.split('?')[0].replace(/-/g)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(), ' '),
-                    url: baseUrl + '/' + href,
-                    posterUrl: (function (p) { if (!p) return ''; if (p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : ''),
-                    type: 'anime',
-                    playbackPolicy: 'none'
-                }));
+                const fullUrl = baseUrl + '/' + href;
+                if (!seenUrls.has(fullUrl)) {
+                    seenUrls.add(fullUrl);
+                    featured.push(new MultimediaItem({
+                        title: (title || href.split('?')[0].replace(/-/g, ' ').replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim()),
+                        url: fullUrl,
+                        description: description || '',
+                        posterUrl: (function (p) { if (!p) return ''; if (p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : ''),
+                        type: 'anime', playbackPolicy: 'none'
+                    }));
+                }
             }
         });
+        if (featured.length > 0) results['À la Une'] = featured;
 
-        // Also scrape from the embedded autocomplete array for missing items
+        // Full catalogue from embedded autocomplete array
+        const catalogue = [];
         const regex = /{ *label:s*"([^"]+)",s*image:s*"([^"]+)",s*url:s*"([^"]+)"/g;
         let match;
         while ((match = regex.exec(html)) !== null) {
             const title = match[1];
             let posterUrl = match[2];
             let href = match[3];
-            // simple duplicate check based on url
-            let fullUrl = baseUrl + '/' + href;
-            if (!items.find(i => i.url === fullUrl)) {
-                if (href && !href.startsWith('http') && !href.startsWith('/') && href !== 'android' && href !== 'contact') {
-                    items.push(new MultimediaItem({
-                        title: (title)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
-                        url: fullUrl,
-                        posterUrl: (function (p) { if (!p) return ''; if (p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : ''),
-                        type: 'anime',
-                        playbackPolicy: 'none'
-                    }));
-                }
+            const fullUrl = baseUrl + '/' + href;
+            if (!seenUrls.has(fullUrl) && href && !href.startsWith('http') && !href.startsWith('/') && href !== 'android' && href !== 'contact') {
+                seenUrls.add(fullUrl);
+                catalogue.push(new MultimediaItem({
+                    title: (title)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
+                    url: fullUrl,
+                    posterUrl: (function (p) { if (!p) return ''; if (p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : ''),
+                    type: 'anime', playbackPolicy: 'none'
+                }));
             }
         }
+        if (catalogue.length > 0) results['Catalogue Sekai'] = catalogue;
 
-        cb({
-            success: true,
-            data: {
-                "Catalogue Sekai": items
-            }
-        });
+        cb({ success: true, data: results });
     } catch (e) {
-        cb({ success: false, errorCode: "PARSE_ERROR", message: e.stack });
+        log('getHome error', e); cb({ success: false, errorCode: 'PARSE_ERROR', message: String(e) });
     }
 }
 
@@ -175,23 +211,68 @@ async function search(query, cb) {
 
         cb({ success: true, data: items });
     } catch (e) {
-        cb({ success: false, errorCode: "SEARCH_ERROR", message: e.stack });
+        log('search error', e); cb({ success: false, errorCode: 'SEARCH_ERROR', message: String(e) });
     }
 }
 
+function detectSeasonAndType(name) {
+        let season = 1;
+        let contentType = undefined;
+        if (name) {
+            const sMatch = name.match(/(?:saison|season|s)\s*(\d+)/i);
+            if (sMatch) season = parseInt(sMatch[1]);
+            const s00Match = name.match(/S(\d+)E\d+/i);
+            if (s00Match) season = parseInt(s00Match[1]);
+            if (/\b(?:oav|ova)\b/i.test(name)) contentType = 'OAV';
+            else if (/\bfilm\b/i.test(name)) contentType = 'Film';
+            else if (/\b(?:special|spécial)\b/i.test(name)) contentType = 'Spécial';
+        }
+        return { season, contentType };
+    }
+
+function detectDubStatus(url, title) {
+        const text = (url || '') + ' ' + (title || '');
+        if (/\/vf\b|\(VF\)|-vf$/i.test(text)) return 'dub';
+        if (/\/vostfr\b|\(VOSTFR\)|-vostfr$/i.test(text)) return 'sub';
+        return 'none';
+    }
+
 async function load(url, cb) {
     try {
-        const res = await axios.get(url, { headers });
-        const html = res.data;
+        // Parallelize: fetch page + episodesData.js simultaneously
+        const [pageRes, edRes] = await Promise.all([
+            axios.get(url, { headers }),
+            axios.get(baseUrl + '/episodesData.js', { headers }).catch(() => ({ data: '' }))
+        ]);
+        const html = pageRes.data;
         const doc = await parseHtml(html);
 
         const title = doc.querySelector('title')?.textContent.replace('Sekai', '').trim();
         const description = doc.querySelector('meta[property="og:description"]')?.getAttribute('content');
         const posterUrl = doc.querySelector('meta[property="og:image"]')?.getAttribute('content');
+        // Extract metadata: year (from title or page)
+        const yearMatch = html.match(/\b(\d{4})\b/);
+        const year = yearMatch ? parseInt(yearMatch[1]) : undefined;
 
-        // Extract episode count from last episode selection
-        const lastSoloMatch = html.match(/var last[a-zA-Z0-9]+\s*=\s*(\d+)/i);
-        const epCount = lastSoloMatch ? parseInt(lastSoloMatch[1]) : 1;
+        // Extract episode count from external episodesData.js
+        let epCount = 1;
+        try {
+            const edHtml = typeof edRes.data === 'string' ? edRes.data : JSON.stringify(edRes.data);
+            // Try to match the show slug from URL to find its lastEpisode
+            const slug = url.split('/').pop().split('?')[0];
+            // Try common key patterns: the slug itself, or 'op' for one-piece, etc.
+            const keyPatterns = [slug, slug.replace(/-/g, ''), 'op'];
+            for (const key of keyPatterns) {
+                const keyRegex = new RegExp(key + '\\s*:\\s*\\{[^}]*lastEpisode\\s*:\\s*(\\d+)', 'i');
+                const edMatch = edHtml.match(keyRegex);
+                if (edMatch) {
+                    epCount = parseInt(edMatch[1]);
+                    break;
+                }
+            }
+            // If no match found, default to 1 episode (user can navigate manually)
+            // Don't use max across all shows as that would be inaccurate
+        } catch (e) { }
 
         const episodes = [];
         for (let i = 1; i <= epCount; i++) {
@@ -199,7 +280,8 @@ async function load(url, cb) {
                 name: `Épisode ${i}`,
                 episode: i,
                 url: url + (url.includes('?') ? '&' : '?') + `ep=${i}`,
-                season: 1
+                season: 1,
+                dubStatus: detectDubStatus(url, 'Épisode ' + i)
             }));
         }
 
@@ -210,11 +292,12 @@ async function load(url, cb) {
                 description,
                 posterUrl,
                 type: 'anime',
-                episodes
+                episodes,
+                year
             })
         });
     } catch (e) {
-        cb({ success: false, errorCode: "LOAD_ERROR", message: e.stack });
+        log('load error: ' + url, e); cb({ success: false, errorCode: 'LOAD_ERROR', message: String(e) });
     }
 }
 
@@ -235,19 +318,26 @@ async function loadStreams(url, cb) {
         const html = res.data;
         const streams = [];
 
-        // Extract mu variables (base URLs)
+        // Extract mu variables (base URLs) - try multiple patterns
         const muMap = {};
-        const muRegex = /var (mu\d+)\s*=\s*atob\("([^"]+)"\)/g;
+        // Pattern 1: var mu28 = atob("...")
+        const muRegex1 = /var\s+(mu\d+)\s*=\s*atob\(["']([^"']+)["']\)/g;
         let muMatch;
-        while ((muMatch = muRegex.exec(html)) !== null) {
-            // simple base64 decode for the known mugiwara URLs
+        while ((muMatch = muRegex1.exec(html)) !== null) {
             let b64 = muMatch[2];
             let decoded = "";
             if (b64 === "aHR0cHM6Ly8yMi5tdWdpd2FyYS5vbmUv") decoded = "https://22.mugiwara.one/";
             else if (b64 === "aHR0cHM6Ly8yNi5tdWdpd2FyYS5vbmUv") decoded = "https://26.mugiwara.one/";
             else if (b64 === "aHR0cHM6Ly8yNy5tdWdpd2FyYS5vbmUv") decoded = "https://27.mugiwara.one/";
-
-            if (decoded) muMap[muMatch[1]] = decoded;
+            else { try { decoded = decodeBase64(b64); } catch (e) { } }
+            if (decoded && decoded.startsWith('http')) muMap[muMatch[1]] = decoded;
+        }
+        // Pattern 2: mu28 = "https://..."
+        if (Object.keys(muMap).length === 0) {
+            const muRegex2 = /var\s+(mu\d+)\s*=\s*["'](https?:\/\/[^"']+)["']/g;
+            while ((muMatch = muRegex2.exec(html)) !== null) {
+                muMap[muMatch[1]] = muMatch[2];
+            }
         }
 
         // Extract slug from URL or HTML
@@ -287,7 +377,7 @@ async function loadStreams(url, cb) {
 
         cb({ success: true, data: streams });
     } catch (e) {
-        cb({ success: false, errorCode: "STREAM_ERROR", message: String(e) });
+        log('loadStreams error: ' + url, e); cb({ success: false, errorCode: 'STREAM_ERROR', message: String(e) });
     }
 }
 

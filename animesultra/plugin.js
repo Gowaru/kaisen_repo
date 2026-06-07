@@ -76,7 +76,10 @@ const axios = {
     }
 };
 
-const baseUrl = 'https://animesultra.net';
+const PLUGIN_ID = 'animesultra';
+function log(msg, data) { try { console.log(`[${PLUGIN_ID}] ${msg}`, data || ''); } catch (_) { } }
+
+const baseUrl = (typeof manifest !== 'undefined' && manifest.baseUrl) ? manifest.baseUrl : 'https://ww.animesultra.org';
 const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
@@ -89,6 +92,16 @@ const PluginExtractors = {
 
     async resolveStream(url) {
         if (!url) return null;
+
+        // 1. Try SkyStream built-in loadExtractor first
+        if (typeof loadExtractor !== 'undefined') {
+            try {
+                const streams = await loadExtractor(url);
+                if (streams && streams.length > 0) return streams[0];
+            } catch (e) { }
+        }
+
+        // 2. Fallback: bundled skystream-extractors
         try {
             let extracted = [];
             if (url.includes('mixdrop')) {
@@ -111,7 +124,7 @@ const PluginExtractors = {
             if (extracted && extracted.length > 0) {
                 return extracted[0]; 
             }
-        } catch (e) { }
+        } catch (e) { log('Extractor failed: ' + url, e); }
 
         // Manual Extraction for Sibnet
         if (url.includes('sibnet.ru')) {
@@ -129,7 +142,7 @@ const PluginExtractors = {
                         headers: { 'Referer': url }
                     });
                 }
-            } catch (e) { }
+            } catch (e) { log('Sibnet extraction failed', e); }
         }
 
         // Manual Extraction for Sendvid
@@ -144,7 +157,7 @@ const PluginExtractors = {
                         source: 'Sendvid'
                     });
                 }
-            } catch (e) { }
+            } catch (e) { log('Sendvid extraction failed', e); }
         }
 
         // Fallbacks for local / standard proxying
@@ -180,52 +193,89 @@ async function getHome(cb) {
         const doc = await parseHtml(html);
         const results = {};
         const queryAll = (d, s) => Array.from(d.querySelectorAll(s));
+        const seenUrls = new Set();
+        const fixUrl = p => { if (!p) return ''; if (p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; };
 
+        // ── 1. Tendance (swiper carousel) ──
         const trendingItems = [];
-        queryAll(doc, '.block_area_home .swiper-wrapper .swiper-slide').forEach((el) => {
-            const titleEl = el.querySelector('.film-title');
+        queryAll(doc, '.block_area_home .swiper-wrapper .swiper-slide, .deslide-wrap .swiper-slide').forEach((el) => {
+            const titleEl = el.querySelector('.film-title, .desi-head-title');
             const linkEl = el.querySelector('a');
             const imgEl = el.querySelector('img');
             const title = titleEl?.textContent.trim();
             const url = linkEl?.getAttribute('href');
             const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
-            if (title && url) {
-                trendingItems.push({
-                    title,
-                    url: url.startsWith('http') ? url : baseUrl + url,
-                    posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl),
-                    type: 'anime', playbackPolicy: 'none'
-                });
+            if (title && url && !seenUrls.has(url)) {
+                seenUrls.add(url);
+                trendingItems.push(new MultimediaItem({
+                    title, url: url.startsWith('http') ? url : baseUrl + url,
+                    posterUrl: fixUrl(posterUrl), type: 'anime'
+                }));
             }
         });
         if (trendingItems.length > 0) results['Tendance'] = trendingItems;
 
-        queryAll(doc, '.block_area_home, .block_area').forEach(block => {
-            const titleEl = block.querySelector('.cat-heading') || block.querySelector('h2');
+        // ── 2. All block areas (Derniers Épisodes, Derniers Animes, Les Plus Regardés, etc.) ──
+        queryAll(doc, '.block_area_home, .block_area, .block_area_sidebar, .block_area-genres, .block_area-list, .block_area_trending').forEach(block => {
+            const titleEl = block.querySelector('.cat-heading, .desi-head-title, h2, h3');
             const sectionTitle = titleEl ? titleEl.textContent.trim() : null;
-            if (!sectionTitle) return;
-            let items = [];
-            queryAll(block, '.film_list-wrap .flw-item').forEach(el => {
-                const linkEl = el.querySelector('.film-name a') || el.querySelector('a');
-                const imgEl = el.querySelector('img');
-                const epEl = el.querySelector('.tick-eps');
+            if (!sectionTitle || results[sectionTitle]) return;
+            const items = [];
+            // Try multiple item selectors for different block types
+            const itemSelectors = [
+                '.film_list-wrap .flw-item',   // Standard film list items
+                '.film_list-grid .flw-item',    // Grid layout items
+                '.hst-item',                    // History items
+                '.fdi-item',                    // Film detail items
+                '.pmu-item',                    // Popular items
+                'article.item'                  // Generic article items
+            ];
+            for (const sel of itemSelectors) {
+                queryAll(block, sel).forEach(el => {
+                    if (items.length >= 20) return;
+                    const linkEl = el.querySelector('.film-name a, h3 a, a');
+                    const imgEl = el.querySelector('img');
+                    const epEl = el.querySelector('.tick-eps, .ep-count, .ep');
+                    const title = linkEl?.textContent.trim();
+                    const url = linkEl?.getAttribute('href');
+                    const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
+                    const ep = epEl?.textContent.trim();
+                    if (title && url && !seenUrls.has(url)) {
+                        seenUrls.add(url);
+                        items.push(new MultimediaItem({
+                            title: title + (ep ? ' - ' + ep : ''),
+                            url: url.startsWith('http') ? url : baseUrl + url,
+                            posterUrl: fixUrl(posterUrl), type: 'anime'
+                        }));
+                    }
+                });
+                if (items.length > 0) break;
+            }
+            if (items.length > 0) results[sectionTitle] = items;
+        });
+
+        // ── 3. Fallback ──
+        if (Object.keys(results).length === 0) {
+            const fallbackItems = [];
+            queryAll(doc, '.film_list-wrap .flw-item, .film-name a').forEach(el => {
+                const linkEl = el.querySelector ? (el.querySelector('.film-name a') || el.querySelector('a')) : el;
                 const title = linkEl?.textContent.trim();
                 const url = linkEl?.getAttribute('href');
+                const imgEl = el.querySelector ? el.querySelector('img') : null;
                 const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
-                const ep = epEl?.textContent.trim();
-                if (title && url) {
-                    items.push({
-                        title: title + (ep ? ' - ' + ep : ''),
-                        url: url.startsWith('http') ? url : baseUrl + url,
-                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl),
-                        type: 'anime', playbackPolicy: 'none'
-                    });
+                if (title && url && !seenUrls.has(url)) {
+                    seenUrls.add(url);
+                    fallbackItems.push(new MultimediaItem({
+                        title, url: url.startsWith('http') ? url : baseUrl + url,
+                        posterUrl: fixUrl(posterUrl), type: 'anime'
+                    }));
                 }
             });
-            if (items.length > 0 && !results[sectionTitle]) results[sectionTitle] = items;
-        });
+            if (fallbackItems.length > 0) results['Derniers Ajouts'] = fallbackItems;
+        }
+
         cb({ success: true, data: results });
-    } catch (e) { cb({ success: false }); }
+    } catch (e) { log('getHome error', e); cb({ success: false, errorCode: 'HOME_ERROR', message: String(e) }); }
 }
 
 async function search(query, cb) {
@@ -233,37 +283,72 @@ async function search(query, cb) {
         const res = await axios.get(`${baseUrl}/?s=${encodeURIComponent(query)}`, { headers });
         const doc = await parseHtml(res.data);
         const items = [];
-        Array.from(doc.querySelectorAll('.film_list-wrap .flw-item')).forEach(el => {
-            const linkEl = el.querySelector('.film-name a') || el.querySelector('a');
-            const imgEl = el.querySelector('img');
-            const title = linkEl?.textContent.trim();
-            const url = linkEl?.getAttribute('href');
-            const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
-            if (title && url) {
-                items.push({
-                    title,
-                    url: url.startsWith('http') ? url : baseUrl + url,
-                    posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl),
-                    type: 'anime', playbackPolicy: 'none'
-                });
-            }
-        });
+        const seenUrls = new Set();
+        const selectors = ['.film_list-wrap .flw-item', '.film-name a', 'article', '.post-item'];
+        for (const sel of selectors) {
+            Array.from(doc.querySelectorAll(sel)).forEach(el => {
+                const linkEl = el.querySelector('.film-name a') || el.querySelector('a');
+                const imgEl = el.querySelector('img');
+                const title = linkEl?.textContent.trim();
+                const url = linkEl?.getAttribute('href');
+                const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
+                if (title && url && !seenUrls.has(url)) {
+                    seenUrls.add(url);
+                    items.push(new MultimediaItem({
+                        title,
+                        url: url.startsWith('http') ? url : baseUrl + url,
+                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl),
+                        type: 'anime', playbackPolicy: 'none'
+                    }));
+                }
+            });
+            if (items.length > 0) break;
+        }
         cb({ success: true, data: items });
-    } catch (e) { cb({ success: false }); }
+    } catch (e) { log('search error', e); cb({ success: false, errorCode: 'SEARCH_ERROR', message: String(e) }); }
 }
+
+function detectSeasonAndType(name) {
+        let season = 1;
+        let contentType = undefined;
+        if (name) {
+            const sMatch = name.match(/(?:saison|season|s)\s*(\d+)/i);
+            if (sMatch) season = parseInt(sMatch[1]);
+            const s00Match = name.match(/S(\d+)E\d+/i);
+            if (s00Match) season = parseInt(s00Match[1]);
+            if (/\b(?:oav|ova)\b/i.test(name)) contentType = 'OAV';
+            else if (/\bfilm\b/i.test(name)) contentType = 'Film';
+            else if (/\b(?:special|spécial)\b/i.test(name)) contentType = 'Spécial';
+        }
+        return { season, contentType };
+    }
+
+function detectDubStatus(url, title) {
+        const text = (url || '') + ' ' + (title || '');
+        if (/\/vf\b|\(VF\)|-vf$/i.test(text)) return 'dub';
+        if (/\/vostfr\b|\(VOSTFR\)|-vostfr$/i.test(text)) return 'sub';
+        return 'none';
+    }
 
 async function load(url, cb) {
     try {
-        const res = await axios.get(url, { headers });
-        const html = res.data;
+        const movieId = url.match(/\/(\d+)-/)?.[1];
+        // Parallelize: fetch page + AJAX episodes simultaneously
+        const [pageRes, epRes] = await Promise.all([
+            axios.get(url, { headers }),
+            movieId ? axios.get(`${baseUrl}/engine/ajax/full-story.php?newsId=${movieId}&d=${Date.now()}`, { headers }) : Promise.resolve({ data: '' })
+        ]);
+        const html = pageRes.data;
         const doc = await parseHtml(html);
         const title = doc.querySelector('.film-name')?.textContent.trim();
         const description = doc.querySelector('.description')?.textContent.trim();
-        const posterUrl = doc.querySelector('.film-poster-img')?.getAttribute('src');
-        const movieId = url.match(/\/(\d+)-/)?.[1];
+        const posterUrl = doc.querySelector('.film-poster-img')?.getAttribute('src') || doc.querySelector('meta[property="og:image"]')?.getAttribute('content');
+        // Extract metadata: year, genres
+        const yearMatch = html.match(/year["']?\s*:?\s*["']?(\d{4})/i) || html.match(/Ann[eé]e\s*:?\s*(\d{4})/i);
+        const year = yearMatch ? parseInt(yearMatch[1]) : undefined;
+        const genreEls = Array.from(doc.querySelectorAll('.genres a, .sgenerx a, .mgen a, .genre-info a')).map(el => el.textContent.trim()).filter(Boolean);
         const episodes = [];
         if (movieId) {
-            const epRes = await axios.get(`${baseUrl}/engine/ajax/full-story.php?newsId=${movieId}&d=${Date.now()}`, { headers });
             let htmlFrag = typeof epRes.data === 'string' ? epRes.data : (epRes.data.html || '');
             htmlFrag = htmlFrag.replace(/\\"/g, '"').replace(/\\'/g, "'").replace(/\\\//g, '/');
             const epRegex = /<a [^>]*class=["'][^"']*ep-item[^"']*["'][^>]*>/gi;
@@ -274,29 +359,47 @@ async function load(url, cb) {
                 const epNum = aTag.match(/data-number=["'](\d+)["']/)?.[1] || "1";
                 const epTitle = aTag.match(/title=["']([^"']+)["']/)?.[1];
                 if (epUrl) {
+                    const detected = detectSeasonAndType(epTitle);
                     episodes.push(new Episode({
                         name: epTitle || ('Episode ' + epNum),
                         episode: parseInt(epNum),
                         url: epUrl.startsWith('http') ? epUrl : baseUrl + epUrl,
-                        season: 1,
-                        posterUrl: posterUrl
+                        season: detected.season,
+                        posterUrl: posterUrl,
+                        contentType: detected.contentType,
+                        dubStatus: detectDubStatus(epUrl, epTitle)
                     }));
                 }
             }
         }
-        cb({ success: true, data: new MultimediaItem({ type: "anime", title, description, posterUrl, episodes }) });
-    } catch (e) { cb({ success: false }); }
+        // Film fallback: no episodes → pass page URL to loadStreams for iframe extraction
+        if (episodes.length === 0) {
+            episodes.push(new Episode({
+                name: title || 'Film',
+                episode: 1,
+                url: url,
+                season: 1,
+                posterUrl: posterUrl,
+                contentType: 'Film',
+                dubStatus: detectDubStatus(url, title)
+            }));
+        }
+        cb({ success: true, data: new MultimediaItem({ type: "anime", title, description, posterUrl, episodes, year, genres: genreEls.length > 0 ? genreEls : undefined }) });
+    } catch (e) { log('load error: ' + url, e); cb({ success: false, errorCode: 'LOAD_ERROR', message: String(e) }); }
 }
 
 async function loadStreams(url, cb) {
     try {
-        const res = await axios.get(url, { headers });
-        const html = res.data;
-        const streams = [];
         const movieId = url.match(/\/(\d+)-/)?.[1];
+        // Parallelize: fetch page + AJAX content simultaneously
+        const [pageRes, epRes] = await Promise.all([
+            axios.get(url, { headers }),
+            movieId ? axios.get(`${baseUrl}/engine/ajax/full-story.php?newsId=${movieId}&d=${Date.now()}`, { headers }) : Promise.resolve({ data: '' })
+        ]);
+        const html = pageRes.data;
+        const streams = [];
         let fullStoryHtml = html;
         if (!html.includes('content_player_') && movieId) {
-            const epRes = await axios.get(`${baseUrl}/engine/ajax/full-story.php?newsId=${movieId}&d=${Date.now()}`, { headers });
             fullStoryHtml = typeof epRes.data === 'string' ? epRes.data : (epRes.data.html || '');
             fullStoryHtml = fullStoryHtml.replace(/\\"/g, '"').replace(/\\'/g, "'").replace(/\\\//g, '/');
         }
@@ -316,7 +419,7 @@ async function loadStreams(url, cb) {
             }
         }
         cb({ success: true, data: streams });
-    } catch (e) { cb({ success: false }); }
+    } catch (e) { log('loadStreams error: ' + url, e); cb({ success: false, errorCode: 'STREAM_ERROR', message: String(e) }); }
 }
 
 
