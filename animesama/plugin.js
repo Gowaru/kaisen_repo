@@ -179,31 +179,18 @@ const Extractors = {
             } catch (e) { }
         }
 
-        // --- Vidmoly (JWT redirect + file extraction) ---
+        // --- Vidmoly (domain changed to vidmoly.net, sources pattern extraction) ---
         if (url.includes('vidmoly')) {
             try {
-                let res = await axios.get(url, { headers: { 'Referer': 'https://anime-sama.to/' } });
+                // vidmoly.to → vidmoly.net domain migration
+                let vidmolyUrl = url.replace(/vidmoly\.to/g, 'vidmoly.net');
+                const vidmolyHeaders = {
+                    'Referer': 'https://anime-sama.to/',
+                    'Sec-Fetch-Dest': 'iframe',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0'
+                };
+                let res = await axios.get(vidmolyUrl, { headers: vidmolyHeaders });
                 let html = typeof res.data === 'string' ? res.data : '';
-
-                // Handle JS redirect (JWT protection)
-                const redirMatch = html.match(/window\.location\.replace\(['"]([^'"]+)['"]\)/i);
-                if (redirMatch) {
-                    let redirUrl = redirMatch[1];
-                    // Reconstruct absolute URL from relative redirect
-                    if (!redirUrl.startsWith('http')) {
-                        const baseMatch = url.match(/(https?:\/\/[^\/]+)/);
-                        const origin = baseMatch ? baseMatch[1] : 'https://vidmoly.to';
-                        if (redirUrl.startsWith('?')) {
-                            redirUrl = url.split('?')[0] + redirUrl;
-                        } else if (redirUrl.startsWith('/')) {
-                            redirUrl = origin + redirUrl;
-                        } else {
-                            redirUrl = origin + '/' + redirUrl;
-                        }
-                    }
-                    res = await axios.get(redirUrl, { headers: { 'Referer': url } });
-                    html = typeof res.data === 'string' ? res.data : '';
-                }
 
                 // Try getAndUnpack for packed JS
                 if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
@@ -213,21 +200,47 @@ const Extractors = {
                     } catch (e) { }
                 }
 
-                const fileMatch = html.match(/file\s*:\s*"(https?:\/\/[^"]+)"/i) ||
-                    html.match(/sources\s*:\s*\[\{[^}]*file\s*:\s*"(https?:\/\/[^"]+)"/i);
+                // Primary: sources [{file: '...'}] pattern (vStream-style)
+                const fileMatch = html.match(/sources\s*:\s*\[\s*\{\s*file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/file\s*:\s*["']([^"']+\.m3u8[^"']*)["']/i) ||
+                    html.match(/file\s*:\s*["']([^"']+\.mp4[^"']*)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i);
                 if (fileMatch) {
-                    const videoUrl = fileMatch[1];
+                    let videoUrl = fileMatch[1];
+                    if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
                     return new StreamResult({
                         url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl),
                         quality: 'Auto',
                         source: 'Vidmoly',
-                        headers: { 'Referer': url }
+                        headers: { 'Referer': vidmolyUrl }
                     });
                 }
+
+                // Fallback: try vidmoly.to domain if vidmoly.net didn't contain sources pattern
+                if (url.includes('vidmoly.to') && !html.includes('sources')) {
+                    res = await axios.get(url, { headers: vidmolyHeaders });
+                    html = typeof res.data === 'string' ? res.data : '';
+                    if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                        try { html = html + '\n' + getAndUnpack(html); } catch (e) { }
+                    }
+                    const fallbackMatch = html.match(/sources\s*:\s*\[\s*\{\s*file\s*:\s*['"]([^'"]+)['"]/i) ||
+                        html.match(/file\s*:\s*['"]([^'"]+)['"]/i);
+                    if (fallbackMatch) {
+                        let videoUrl = fallbackMatch[1];
+                        if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                        return new StreamResult({
+                            url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl),
+                            quality: 'Auto',
+                            source: 'Vidmoly',
+                            headers: { 'Referer': url }
+                        });
+                    }
+                }
             } catch (e) { }
-            // Vidmoly: extraction failed, fallback to proxy
+            // Vidmoly: extraction failed, fallback to proxy with vidmoly.net domain
+            let proxyUrl = url.replace('vidmoly.to', 'vidmoly.net');
             return new StreamResult({
-                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                url: "MAGIC_PROXY_v1" + encodeBase64(proxyUrl),
                 quality: 'Auto',
                 source: 'Vidmoly',
                 headers: { 'Referer': 'https://anime-sama.to/' }
@@ -272,6 +285,8 @@ const Extractors = {
         }
 
         // --- Embed4Me / Lpayer ---
+        // SPA with AES-encrypted API + dynamic JS loading; direct extraction not feasible.
+        // Falls back to MAGIC_PROXY for client-side rendering in the app's webview.
         if (url.includes('embed4me') || url.includes('lpayer')) {
             return new StreamResult({
                 url: "MAGIC_PROXY_v1" + encodeBase64(url),
@@ -628,6 +643,16 @@ async function load(url, cb) {
             description = descMatch[1].replace(/<[^>]+>/g, '').trim();
         }
 
+        // Extract status (En cours / Terminé)
+        let status = undefined;
+        const statusMatch = html.match(/<td[^>]*class="lbl"[^>]*>\s*[ÉE]tat\s*:\s*<\/td>\s*<td[^>]*class="val"[^>]*>([\s\S]*?)<\/td>/i);
+        if (statusMatch) {
+            const raw = statusMatch[1].trim().toLowerCase();
+            if (/en\s*cours/i.test(raw)) status = 'ongoing';
+            else if (/termin|fini|complet/i.test(raw)) status = 'completed';
+            else status = raw;
+        }
+
         const cleanHtml = html.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*panneauAnime.*$/gm, '').replace(/<!--[\s\S]*?-->/g, '');
         const seasonRegex = /panneauAnime\s*\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']\s*\)/gi;
         let sMatch;
@@ -763,6 +788,7 @@ async function load(url, cb) {
                 type: "anime",
                 posterUrl: posterUrl,
                 description: description,
+                status: status,
                 episodes: eps
             })
         });

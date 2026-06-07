@@ -318,6 +318,10 @@ async function load(url, cb) {
         const genreEls = Array.from(doc.querySelectorAll('.genres-content a, .wp-manga-genre a, .tag-summary a')).map(el => el.textContent.trim()).filter(Boolean);
         const statusEl = doc.querySelector('.post-status .summary-content');
         const status = statusEl?.textContent.trim().toLowerCase();
+        // Extract score from .score element
+        const scoreEl = doc.querySelector('.score.font-meta.total_votes');
+        const parsedScore = scoreEl ? parseFloat(scoreEl.textContent.trim()) : NaN;
+        const score = Number.isFinite(parsedScore) ? parsedScore : undefined;
         const episodes = [];
         // Madara theme: .wp-manga-chapter or li.chapter-item
         doc.querySelectorAll('.wp-manga-chapter a, li.version-chap a, .listing-chapters_wrap a, .chapter-list a').forEach((el, index) => {
@@ -371,7 +375,7 @@ async function load(url, cb) {
             if (recommendations.length > 0) break;
         }
 
-        cb({ success: true, data: new MultimediaItem({ type: "anime", title, description, posterUrl, episodes, year, status, genres: genreEls.length > 0 ? genreEls : undefined, recommendations: recommendations.length > 0 ? recommendations : undefined }) });
+        cb({ success: true, data: new MultimediaItem({ type: "anime", title, description, posterUrl, episodes, year, score, status, genres: genreEls.length > 0 ? genreEls : undefined, recommendations: recommendations.length > 0 ? recommendations : undefined }) });
     } catch (e) { log('load error: ' + url, e); cb({ success: false, errorCode: 'LOAD_ERROR', message: String(e) }); }
 }
 
