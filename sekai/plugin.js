@@ -216,7 +216,7 @@ async function search(query, cb) {
 }
 
 function detectSeasonAndType(name) {
-        let season = 1;
+        let season = undefined;
         let contentType = undefined;
         if (name) {
             const sMatch = name.match(/(?:saison|season|s)\s*(\d+)/i);
@@ -248,8 +248,15 @@ async function load(url, cb) {
         const doc = await parseHtml(html);
 
         const title = doc.querySelector('title')?.textContent.replace('Sekai', '').trim();
-        const description = doc.querySelector('meta[property="og:description"]')?.getAttribute('content');
-        const posterUrl = doc.querySelector('meta[property="og:image"]')?.getAttribute('content');
+        // Description: try multiple selectors
+        const description = doc.querySelector('.Description, .description, .series-description')?.textContent.trim() ||
+            doc.querySelector('.entry-content')?.textContent.trim() ||
+            doc.querySelector('meta[property="og:description"]')?.getAttribute('content') ||
+            doc.querySelector('meta[name="description"]')?.getAttribute('content');
+        // Poster: try multiple selectors
+        const posterImg = doc.querySelector('.Series img, .poster img, .cover img');
+        const posterUrl = posterImg?.getAttribute('src') || posterImg?.getAttribute('data-src') ||
+            doc.querySelector('meta[property="og:image"]')?.getAttribute('content');
         // Extract metadata: year (from title or page)
         const yearMatch = html.match(/\b(\d{4})\b/);
         const year = yearMatch ? parseInt(yearMatch[1]) : undefined;

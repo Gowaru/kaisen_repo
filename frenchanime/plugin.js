@@ -142,8 +142,27 @@ const Extractors = {
         } catch (e) { log('Sendvid extraction failed', e); }
         }
 
+        // --- Vidmoly (domain migrated to vidmoly.net) ---
         if (url.includes('vidmoly')) {
-            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Vidmoly (Proxy)', headers: { Referer: 'https://vidmoly.to/' } });
+            try {
+                let vidmolyUrl = url.replace('vidmoly.to', 'vidmoly.net');
+                const vmHeaders = { 'Referer': 'https://anime-sama.to/', 'Sec-Fetch-Dest': 'iframe', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0' };
+                let res = await axios.get(vidmolyUrl, { headers: vmHeaders });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { html = html + '\n' + getAndUnpack(html); } catch (e) { }
+                }
+                const fileMatch = html.match(/sources\s*:\s*\[\s*\{\s*file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/file\s*:\s*["']([^"']+\.m3u8[^"']*)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i);
+                if (fileMatch) {
+                    let videoUrl = fileMatch[1];
+                    if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl), quality: 'Auto', source: 'Vidmoly', headers: { 'Referer': 'https://vidmoly.net/' } });
+                }
+            } catch (e) { }
+            let proxyUrl = url.replace('vidmoly.to', 'vidmoly.net');
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(proxyUrl), quality: 'Auto', source: 'Vidmoly', headers: { 'Referer': 'https://vidmoly.net/' } });
         }
 
         if (url.endsWith('.mp4') || url.endsWith('.m3u8')) {
@@ -172,7 +191,7 @@ async function getHome(cb) {
             const title = el.querySelector('.title1')?.textContent.trim();
             const subTitle = el.querySelector('.title0')?.textContent.trim();
             const url = linkEl?.getAttribute('href');
-            const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
+            const posterUrl = imgEl?.getAttribute('src') || imgEl?.getAttribute('data-src') || linkEl?.querySelector('img')?.getAttribute('src');
             if (title && url && !seenUrls.has(url)) {
                 seenUrls.add(url);
                 topItems.push(new MultimediaItem({
@@ -184,78 +203,63 @@ async function getHome(cb) {
         });
         if (topItems.length > 0) results['Top Animes'] = topItems;
 
-        // ── 2. Derniers Épisodes VOSTFR (blocklastadded + .langue.vostfr) ──
-        const vostfrItems = [];
-        Array.from(doc.querySelectorAll('.blocklastadded .mov-i, .blocklastadded li')).forEach(el => {
-            const langEl = el.querySelector('.langue.vostfr, i.langue.vostfr');
-            if (!langEl) return;
-            const linkEl = el.querySelector('a.full-link, a');
+        // ── 2. Derniers Épisodes (blocklastadded + mov.clearfix) ──
+        Array.from(doc.querySelectorAll('.blocklastadded .mov.clearfix, .blocklastadded li')).forEach(el => {
+            const langEl = el.querySelector('.langue.vostfr, .langue.vf, i.langue.vostfr, i.langue.vf');
+            const linkEl = el.querySelector('a.full-link, a[href]');
             const imgEl = el.querySelector('img');
-            const title = el.querySelector('.mov-t, .mov-m')?.textContent.trim() || linkEl?.textContent.trim();
-            const url = linkEl?.getAttribute('href');
+            const title = el.querySelector('.mov-t, .mov-m')?.textContent.trim() || imgEl?.getAttribute('alt') || linkEl?.textContent.trim();
+            const url = linkEl?.getAttribute('href') || linkEl?.getAttribute('data-link');
+            const posterUrl = imgEl?.getAttribute('src') || imgEl?.getAttribute('data-src') || el.querySelector('.mov-i img')?.getAttribute('src');
             if (title && url && title.length > 2 && !seenUrls.has(url)) {
                 seenUrls.add(url);
-                vostfrItems.push(new MultimediaItem({
+                const section = langEl && langEl.classList.contains('vf') ? 'Derniers Épisodes VF' : 'Derniers Épisodes VOSTFR';
+                if (!results[section]) results[section] = [];
+                results[section].push(new MultimediaItem({
                     title: title.trim(), url: url.startsWith('http') ? url : baseUrl + url,
-                    posterUrl: fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src')), type: 'anime'
+                    posterUrl: fixUrl(posterUrl), type: 'anime'
                 }));
             }
         });
-        if (vostfrItems.length > 0) results['Derniers Épisodes VOSTFR'] = vostfrItems;
 
-        // ── 3. Derniers Épisodes VF (blocklastadded + .langue.vf) ──
-        const vfItems = [];
-        Array.from(doc.querySelectorAll('.blocklastadded .mov-i, .blocklastadded li')).forEach(el => {
-            const langEl = el.querySelector('.langue.vf, i.langue.vf');
-            if (!langEl) return;
-            const linkEl = el.querySelector('a.full-link, a');
-            const imgEl = el.querySelector('img');
-            const title = el.querySelector('.mov-t, .mov-m')?.textContent.trim() || linkEl?.textContent.trim();
-            const url = linkEl?.getAttribute('href');
-            if (title && url && title.length > 2 && !seenUrls.has(url)) {
-                seenUrls.add(url);
-                vfItems.push(new MultimediaItem({
-                    title: title.trim(), url: url.startsWith('http') ? url : baseUrl + url,
-                    posterUrl: fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src')), type: 'anime'
-                }));
-            }
-        });
-        if (vfItems.length > 0) results['Derniers Épisodes VF'] = vfItems;
-
-        // ── 4. Content sections by headings (fallback) ──
-        Array.from(doc.querySelectorAll('h2, h3')).forEach(heading => {
+        // ── 3. Content sections by headings ──
+        Array.from(doc.querySelectorAll('h2, h3, h4')).forEach(heading => {
             const sectionTitle = heading.textContent.trim();
             if (!sectionTitle || sectionTitle.length < 2 || results[sectionTitle]) return;
             let container = heading.nextElementSibling;
             if (!container) container = heading.parentElement;
             if (!container) return;
             const items = [];
-            Array.from(container.querySelectorAll('.mov.clearfix a, a[href]')).forEach(el => {
-                const title = el.querySelector('.mov-t')?.textContent.trim() || el.textContent.trim();
-                const url = el.getAttribute('href');
+            Array.from(container.querySelectorAll('.mov.clearfix, .mov-i, a[href]')).forEach(el => {
+                const linkEl = el.querySelector('a[href], a.full-link') || el;
                 const imgEl = el.querySelector('img');
+                const title = el.querySelector('.mov-t')?.textContent.trim() || imgEl?.getAttribute('alt') || linkEl?.textContent.trim();
+                const url = linkEl?.getAttribute('href') || linkEl?.getAttribute('data-link');
+                const posterUrl = imgEl?.getAttribute('src') || imgEl?.getAttribute('data-src');
                 if (title && url && title.length > 2 && !url.includes('#') && !seenUrls.has(url)) {
                     seenUrls.add(url);
                     items.push(new MultimediaItem({
                         title, url: url.startsWith('http') ? url : baseUrl + url,
-                        posterUrl: fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src')), type: 'anime'
+                        posterUrl: fixUrl(posterUrl), type: 'anime'
                     }));
                 }
             });
             if (items.length > 0) results[sectionTitle] = items;
         });
 
-        // ── 5. Fallback ──
+        // ── 4. Fallback ──
         if (Object.keys(results).length === 0) {
             const fallbackItems = [];
-            Array.from(doc.querySelectorAll('.mov.clearfix a, article a, .post-title a')).forEach(el => {
+            Array.from(doc.querySelectorAll('.mov.clearfix a, .mov-i a, article a, .post-title a')).forEach(el => {
                 const title = el.textContent.trim();
                 const url = el.getAttribute('href');
+                const imgEl = el.querySelector('img');
+                const posterUrl = imgEl?.getAttribute('src') || imgEl?.getAttribute('data-src');
                 if (title && url && !url.includes('#') && title.length > 2 && !seenUrls.has(url)) {
                     seenUrls.add(url);
                     fallbackItems.push(new MultimediaItem({
                         title, url: url.startsWith('http') ? url : baseUrl + url,
-                        posterUrl: '', type: 'anime'
+                        posterUrl: fixUrl(posterUrl), type: 'anime'
                     }));
                 }
             });
@@ -359,14 +363,24 @@ async function load(url, cb) {
         const html = res.data;
         const doc = await parseHtml(html);
         const title = doc.querySelector('h1')?.textContent.trim() || doc.querySelector('.film-info .title')?.textContent.trim();
-        const description = doc.querySelector('.description, .entry-content, .movie-desc, .full-text')?.textContent.trim();
-        const posterUrl = doc.querySelector('meta[property="og:image"]')?.getAttribute('content') || doc.querySelector('.poster img')?.getAttribute('src');
+        // Description: try multiple selectors
+        const description = doc.querySelector('.description')?.textContent.trim() ||
+            doc.querySelector('.entry-content')?.textContent.trim() ||
+            doc.querySelector('.movie-desc')?.textContent.trim() ||
+            doc.querySelector('.full-text')?.textContent.trim() ||
+            doc.querySelector('span[itemprop="description"]')?.textContent.trim() ||
+            doc.querySelector('meta[name="description"]')?.getAttribute('content') ||
+            doc.querySelector('meta[property="og:description"]')?.getAttribute('content');
+        // Poster: try #posterimg, then .poster img, then og:image
+        const posterUrl = doc.querySelector('#posterimg')?.getAttribute('src') ||
+            doc.querySelector('.poster img')?.getAttribute('src') ||
+            doc.querySelector('meta[property="og:image"]')?.getAttribute('content');
         // Extract metadata: year, genres, status
         const yearMatch = html.match(/Date de sortie\s*:?\s*(\d{4})/i) || html.match(/Ann[eé]e\s*:?\s*(\d{4})/i);
         const year = yearMatch ? parseInt(yearMatch[1]) : undefined;
-        const genreEls = Array.from(doc.querySelectorAll('.genre a, .genres a, .category a')).map(el => el.textContent.trim()).filter(Boolean);
-        const statusEl = doc.querySelector('.status, .statut, [class*="status"]');
-        const status = statusEl?.textContent.trim().toLowerCase();
+        const genreEls = Array.from(doc.querySelectorAll('span[itemprop="genre"], .genre a, .genres a, .category a')).map(el => el.textContent.trim()).filter(Boolean);
+        // Status
+        const status = doc.querySelector('.status, .statut, [class*="status"]')?.textContent.trim().toLowerCase();
         const episodes = [];
         // Detect page-level dubStatus from metadata (itemprop=inLanguage)
         const pageDubStatus = detectPageDubStatus(doc, url);
