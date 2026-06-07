@@ -29,7 +29,7 @@
   {
     "packageName": "com.gowaru.kaisen.animesultra",
     "name": "AnimesUltra",
-    "version": 3,
+    "version": 4,
     "baseUrl": "https://ww.animesultra.org",
     "domains": [
       {
