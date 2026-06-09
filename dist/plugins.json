@@ -2,7 +2,7 @@
   {
     "packageName": "com.gowaru.kaisen.animesama",
     "name": "Anime-Sama",
-    "version": 3,
+    "version": 4,
     "baseUrl": "https://anime-sama.to",
     "description": "Anime-Sama - Streaming anime VF & VOSTFR",
     "authors": [
@@ -29,7 +29,7 @@
   {
     "packageName": "com.gowaru.kaisen.animesultra",
     "name": "AnimesUltra",
-    "version": 4,
+    "version": 5,
     "baseUrl": "https://ww.animesultra.org",
     "domains": [
       {
@@ -73,7 +73,7 @@
   {
     "packageName": "com.gowaru.kaisen.frenchanime",
     "name": "French-Anime",
-    "version": 3,
+    "version": 4,
     "baseUrl": "https://french-anime.com",
     "domains": [
       {
@@ -134,7 +134,7 @@
   {
     "packageName": "com.gowaru.kaisen.vostfree",
     "name": "Vostfree",
-    "version": 3,
+    "version": 4,
     "baseUrl": "https://vostfree.ws",
     "description": "Vostfree - Animes VF et VOSTFR en streaming",
     "authors": [
