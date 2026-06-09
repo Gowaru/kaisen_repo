@@ -403,7 +403,7 @@ async function getHome(cb) {
             let url = el.querySelector('.title1 a, .title0 a')?.getAttribute('href') || linkEl?.getAttribute('href');
             // Validate URL: skip non-anime links
             if (url && !url.match(/\/\d+-[\w-]+\.html/) && !url.includes('/anime/') && !url.includes('/anime-') && !url.includes('/manga/') && !url.includes('/series/')) url = undefined;
-            const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || linkEl?.querySelector('img')?.getAttribute('data-src') || linkEl?.querySelector('img')?.getAttribute('src');
+            const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('data-lazy-src') || imgEl?.getAttribute('src') || linkEl?.querySelector('img')?.getAttribute('data-src') || linkEl?.querySelector('img')?.getAttribute('data-lazy-src') || linkEl?.querySelector('img')?.getAttribute('src');
             if (title && url && !seenUrls.has(url)) {
                 seenUrls.add(url);
                 topItems.push(new MultimediaItem({
@@ -425,7 +425,7 @@ async function getHome(cb) {
             let url = el.querySelector('.mov-t a, .mov-m a')?.getAttribute('href') || linkEl?.getAttribute('href') || linkEl?.getAttribute('data-link');
             // Validate URL: skip non-anime links
             if (url && !url.match(/\/\d+-[\w-]+\.html/) && !url.includes('/anime/') && !url.includes('/anime-') && !url.includes('/manga/') && !url.includes('/series/')) url = undefined;
-            const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || el.querySelector('.mov-i img')?.getAttribute('data-src') || el.querySelector('.mov-i img')?.getAttribute('src');
+            const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('data-lazy-src') || imgEl?.getAttribute('src') || el.querySelector('.mov-i img')?.getAttribute('data-src') || el.querySelector('.mov-i img')?.getAttribute('data-lazy-src') || el.querySelector('.mov-i img')?.getAttribute('src');
             if (title && url && title.length > 2 && !seenUrls.has(url)) {
                 seenUrls.add(url);
                 const section = langEl?.classList?.contains('vf') ? 'Derniers Épisodes VF' : 'Derniers Épisodes VOSTFR';
@@ -453,7 +453,7 @@ async function getHome(cb) {
                 let url = el.querySelector('.mov-t a')?.getAttribute('href') || linkEl?.getAttribute('href') || linkEl?.getAttribute('data-link');
                 // Validate URL: skip non-anime links
                 if (url && !url.match(/\/\d+-[\w-]+\.html/) && !url.includes('/anime/') && !url.includes('/anime-') && !url.includes('/manga/') && !url.includes('/series/')) url = undefined;
-                const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
+                const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('data-lazy-src') || imgEl?.getAttribute('src');
                 if (title && url && title.length > 2 && !url.includes('#') && !seenUrls.has(url)) {
                     seenUrls.add(url);
                     items.push(new MultimediaItem({
@@ -472,7 +472,7 @@ async function getHome(cb) {
                 const title = el.textContent.trim();
                 const url = el.getAttribute('href');
                 const imgEl = el.querySelector('img');
-                const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
+                const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('data-lazy-src') || imgEl?.getAttribute('src');
                 if (title && url && !url.includes('#') && title.length > 2 && !seenUrls.has(url)) {
                     seenUrls.add(url);
                     fallbackItems.push(new MultimediaItem({
@@ -557,11 +557,11 @@ async function search(query, cb) {
             if (results.length === 0 && typeof html === 'string') {
                 const patterns = [
                     // mov.clearfix / mov-t pattern
-                    /<div[^>]*class="[^"]*mov[^"]*clearfix[^"]*"[^>]*>[\s\S]*?<a[^>]+href="([^"]+)"[^>]*>[\s\S]*?<img[^>]+(?:data-src|src)="([^"]+)"[^>]*(?:alt="([^"]*)")?[\s\S]*?(?:mov-t[^>]*>([^<]+)<|class="[^"]*title[^"]*"[^>]*>([^<]+)<)/gi,
+                    /<div[^>]*class="[^"]*mov[^"]*clearfix[^"]*"[^>]*>[\s\S]*?<a[^>]+href="([^"]+)"[^>]*>[\s\S]*?<img[^>]+(?:data-src|data-lazy-src|src)="([^"]+)"[^>]*(?:alt="([^"]*)")?[\s\S]*?(?:mov-t[^>]*>([^<]+)<|class="[^"]*title[^"]*"[^>]*>([^<]+)<)/gi,
                     // Generic item with anime URL pattern
-                    /<a[^>]+href="([^"]*(?:\/anime[-\/]|\/manga\/|\/series\/)[^"]+)"[^>]*>[\s\S]*?<img[^>]+(?:data-src|src)="([^"]+)"[^>]*(?:alt="([^"]*)")?[\s\S]*?<\/a>/gi,
+                    /<a[^>]+href="([^"]*(?:\/anime[-\/]|\/manga\/|\/series\/)[^"]+)"[^>]*>[\s\S]*?<img[^>]+(?:data-src|data-lazy-src|src)="([^"]+)"[^>]*(?:alt="([^"]*)")?[\s\S]*?<\/a>/gi,
                     // Simple anchor with image
-                    /<a[^>]+href="([^"]+)"[^>]*>\s*<img[^>]+(?:data-src|src)="([^"]+)"[^>]+alt="([^"]*)"[^>]*>/gi
+                    /<a[^>]+href="([^"]+)"[^>]*>\s*<img[^>]+(?:data-src|data-lazy-src|src)="([^"]+)"[^>]+alt="([^"]*)"[^>]*>/gi
                 ];
                 for (const regex of patterns) {
                     if (results.length >= 25) break;
@@ -794,37 +794,65 @@ async function load(url, cb) {
             doc.querySelector('article p')?.textContent.trim() ||
             doc.querySelector('meta[name="description"]')?.getAttribute('content') ||
             doc.querySelector('meta[property="og:description"]')?.getAttribute('content');
-        // Poster: try #posterimg, then .poster img, then og:image (with data-src fallback for lazy-loaded)
+        // Poster: try #posterimg, then .poster img, then og:image (with data-src/data-lazy-src fallback for lazy-loaded)
         let rawPoster = doc.querySelector('#posterimg')?.getAttribute('src') ||
             doc.querySelector('#posterimg')?.getAttribute('data-src') ||
+            doc.querySelector('#posterimg')?.getAttribute('data-lazy-src') ||
             doc.querySelector('.poster img')?.getAttribute('src') ||
             doc.querySelector('.poster img')?.getAttribute('data-src') ||
+            doc.querySelector('.poster img')?.getAttribute('data-lazy-src') ||
             doc.querySelector('.mov-img img')?.getAttribute('src') ||
             doc.querySelector('.mov-img img')?.getAttribute('data-src') ||
+            doc.querySelector('.mov-img img')?.getAttribute('data-lazy-src') ||
+            doc.querySelector('.TPostBg')?.getAttribute('src') ||
+            doc.querySelector('.TPostBg')?.getAttribute('data-src') ||
+            doc.querySelector('[itemprop="image"]')?.getAttribute('content') ||
             doc.querySelector('[itemprop="image"] img')?.getAttribute('src') ||
-            doc.querySelector('meta[property="og:image"]')?.getAttribute('content');
+            doc.querySelector('[itemprop="image"] img')?.getAttribute('data-src') ||
+            doc.querySelector('.entry-content img')?.getAttribute('src') ||
+            doc.querySelector('.entry-content img')?.getAttribute('data-src') ||
+            doc.querySelector('article img')?.getAttribute('src') ||
+            doc.querySelector('article img')?.getAttribute('data-src') ||
+            doc.querySelector('meta[property="og:image"]')?.getAttribute('content') ||
+            doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content');
         // Regex fallback: extract posterimg src from raw HTML if DOM selectors failed
         if (!rawPoster) {
             const posterMatch = html.match(/id=["']posterimg["'][^>]*src=["']([^"']+)["']/i) ||
-                html.match(/src=["']([^"']+)["'][^>]*id=["']posterimg["']/i);
+                html.match(/src=["']([^"']+)["'][^>]*id=["']posterimg["']/i) ||
+                html.match(/<img[^>]+class=["'][^"']*poster[^"']*["'][^>]+src=["']([^"']+)["']/i) ||
+                html.match(/<img[^>]+src=["']([^"']+)["'][^>]*class=["'][^"']*poster[^"']*["']/i) ||
+                html.match(/property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
+                html.match(/name=["']twitter:image["'][^>]*content=["']([^"']+)["']/i);
             if (posterMatch) rawPoster = posterMatch[1];
         }
         const posterUrl = fixUrl(rawPoster);
-        // Extract metadata: year, genres, status
-        const yearMatch = html.match(/Date de sortie\s*:?\s*(\d{4})/i) || html.match(/Ann[eé]e\s*:?\s*(\d{4})/i) || html.match(/year["']?\s*:?\s*["']?(\d{4})/i);
-        const year = yearMatch ? parseInt(yearMatch[1]) : undefined;
-        const genreEls = Array.from(doc.querySelectorAll('span[itemprop="genre"], .sgenerx a, .genre a, .genres a, .category a, .Tags a')).map(el => el.textContent.trim()).filter(Boolean);
-        // Status
-        const statusEl = doc.querySelector('.status, .statut, [class*="status"], [class*="Status"]');
+        // Extract metadata: year, genres, status, score
+        // Year: try DOM selectors first, then regex on HTML
+        const yearFromDOM = doc.querySelector('.fdi-year a, .fdi-item.fdi-year a, .year, [itemprop="datePublished"], .Info a[href*="year"]')?.textContent.trim();
+        const yearFromDOMNum = yearFromDOM ? parseInt(yearFromDOM.match(/\d{4}/)?.[0] || '0') : undefined;
+        const yearMatch = html.match(/Date de sortie\s*:?\s*(\d{4})/i) || html.match(/Ann[eé]e\s*:?\s*(\d{4})/i) || html.match(/year["']?\s*:?\s*["']?(\d{4})/i) || html.match(/datePublished["']?\s*:?\s*["']?(\d{4})/i) || html.match(/<(?:span|div)[^>]*class=["'][^"']*year[^"']*["'][^>]*>\s*(\d{4})\s*<\/(?:span|div)>/i);
+        const year = yearFromDOMNum || (yearMatch ? parseInt(yearMatch[1]) : undefined);
+        // Genres: try multiple selector strategies
+        const genreEls = Array.from(doc.querySelectorAll('span[itemprop="genre"], .sgenerx a, .genre a, .genres a, .category a, .Tags a, .wdgt-cat a, [class*="genre"] a, .Info a[href*="genre"]')).map(el => el.textContent.trim()).filter(Boolean);
+        // Status: try selectors then regex fallback
+        const statusEl = doc.querySelector('.status, .statut, [class*="status"], [class*="Status"], .Status, .Statut');
         let status = statusEl?.textContent?.trim()?.toLowerCase();
         if (!status) {
-            const statusMatch = html.match(/Production\s*:?\s*(Oui|Yes|Non|No|En cours|Terminé|Finished)/i);
-            if (statusMatch) status = statusMatch[1].toLowerCase();
+            const statusMatch = html.match(/Production\s*:?\s*(Oui|Yes|Non|No|En cours|Terminé|Finished)/i) ||
+                html.match(/Statut\s*:?\s*([^<\n]+)/i) ||
+                html.match(/Status\s*:?\s*([^<\n]+)/i) ||
+                html.match(/\b(En cours|Termin[ée]|Finished|Ongoing|Completed|Airing)\b/i);
+            if (statusMatch) status = statusMatch[1]?.trim().toLowerCase() || statusMatch[0]?.toLowerCase();
         }
-        // Score
-        const scoreEl = doc.querySelector('.rating, .ratig-layer, [class*="rating"], [class*="score"]');
+        if (status) {
+            if (/termin|complet|fini|ended|finished/i.test(status)) status = 'completed';
+            else if (/cours|airing|ongoing|en cours/i.test(status)) status = 'ongoing';
+        }
+        // Score: try multiple selectors then regex fallback
+        const scoreEl = doc.querySelector('.rating, .ratig-layer, [class*="rating"], [class*="score"], [itemprop="ratingValue"], .post-item .rating, .total_votes, .rating-number');
         const rawScore = scoreEl?.textContent ? parseFloat(scoreEl.textContent.replace(/[^\d.]/g, '')) || undefined : undefined;
-        const score = rawScore && rawScore <= 10 ? rawScore : undefined;
+        const scoreMatch = !rawScore ? html.match(/"ratingValue"\s*:\s*([\d.]+)/i) || html.match(/<meta[^>]*itemprop=["']ratingValue["'][^>]*content=["']([\d.]+)["']/i) || html.match(/>\s*([\d.]+)\s*\/\s*10\s*<\/span>/i) : null;
+        const score = rawScore || (scoreMatch ? parseFloat(scoreMatch[1]) : undefined);
         const episodes = [];
         const seenEpUrls = new Set();
         const seenEpTriples = new Set();

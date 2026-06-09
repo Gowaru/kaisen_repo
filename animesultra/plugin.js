@@ -957,6 +957,29 @@ async function load(url, cb) {
             }
             return anchors;
         }
+        // Build a readable episode name with season + content type + dub status
+        function buildEpisodeName(baseTitle, epNum, seasonNum, contentType, dubStatus) {
+            let parts = [];
+            // Season prefix (Saison X, Film, OAV, etc.)
+            if (contentType === 'Film') {
+                parts.push('Film');
+            } else if (contentType === 'OAV') {
+                parts.push('OAV' + (seasonNum ? ' ' + seasonNum : ''));
+            } else if (contentType === 'Spécial') {
+                parts.push('Spécial' + (seasonNum ? ' ' + seasonNum : ''));
+            } else if (seasonNum) {
+                parts.push('Saison ' + seasonNum);
+            }
+            // Episode title/number
+            parts.push(baseTitle || ('Épisode ' + epNum));
+            // Dub status suffix
+            if (dubStatus === 'dub') {
+                parts.push('(VF)');
+            } else if (dubStatus === 'sub') {
+                parts.push('(VOSTFR)');
+            }
+            return parts.join(' ');
+        }
         // Parse episodes for each season with automatic numbering
         for (let sIdx = 0; sIdx < seasonInfos.length; sIdx++) {
             const sInfo = seasonInfos[sIdx];
@@ -980,8 +1003,9 @@ async function load(url, cb) {
                     const contentType = sInfo.parsedInfo.contentType;
                     // Determine dubStatus from the season URL, fallback to page URL
                     const seasonDubStatus = getDubStatusFromPageUrl(sInfo.url) || detectDubStatus(epUrl, epTitle);
+                    const epName = buildEpisodeName(epTitle || '', parseInt(epNum), seasonNum, contentType, seasonDubStatus);
                     episodes.push(new Episode({
-                        name: epTitle || ('Episode ' + epNum),
+                        name: epName,
                         episode: parseInt(epNum),
                         url: fullEpUrl,
                         season: seasonNum,
@@ -1090,8 +1114,9 @@ async function load(url, cb) {
                                 const altSeasonNum = altToMainSeasonMap[altSInfo.id] || altSInfo.parsedInfo.season || (altIdx + 1);
                                 const altContentType = altSInfo.parsedInfo.contentType;
                                 const altSeasonDubStatus = getDubStatusFromPageUrl(altSInfo.url) || detectDubStatus(epUrl, epTitle);
+                                const altEpName = buildEpisodeName(epTitle || '', parseInt(epNum), altSeasonNum, altContentType, altSeasonDubStatus);
                                 episodes.push(new Episode({
-                                    name: epTitle || ('Episode ' + epNum),
+                                    name: altEpName,
                                     episode: parseInt(epNum),
                                     url: fullEpUrl,
                                     season: altSeasonNum,
@@ -1107,14 +1132,15 @@ async function load(url, cb) {
         }
         // Film fallback: no episodes → pass page URL to loadStreams for iframe extraction
         if (episodes.length === 0) {
+            const fallbackDubStatus = detectDubStatus(url, title);
             episodes.push(new Episode({
-                name: title || 'Film',
+                name: buildEpisodeName(title || 'Film', 1, 1, 'Film', fallbackDubStatus),
                 episode: 1,
                 url: url,
                 season: 1,
                 posterUrl: posterUrl,
                 contentType: 'Film',
-                dubStatus: detectDubStatus(url, title)
+                dubStatus: fallbackDubStatus
             }));
         }
         // ── Extract recommendations from related/similar anime sections ──
