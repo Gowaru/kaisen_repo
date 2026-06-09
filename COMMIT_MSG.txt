@@ -1,8 +1,0 @@
-fix: échapper les slashs dans la regex d'animesultra et ajouter une validation CI
-
-- animesultra/plugin.js: échapper les '/' dans le pattern regex |/ep/|
-  (esbuild interprétait le '/' comme fin du délimiteur de regex)
-- .github/workflows/build.yml: ajout d'une étape de validation esbuild
-  avant le déploiement pour détecter les erreurs de syntaxe
-- package.json: ajout du script "npm run validate" et de esbuild en
-  devDependency pour les vérifications locales
