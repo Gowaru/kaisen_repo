@@ -405,15 +405,26 @@ async function getHome(cb) {
         const seenUrls = new Set();
 
         // Helper: extract items from a flw-item element
+        // IMPORTANT: URL and title MUST come from the same element to avoid mismatches
+        // (e.g., title showing "One Piece" but URL pointing to "Great Teacher Onizuka")
         function extractFlwItem(el) {
-            // URL comes from the poster link (a.film-poster-ahref) OR any link with href
-            const urlEl = el.querySelector('a.film-poster-ahref, a[href]');
-            // Title comes from .film-name a or .film-name (NOT from the poster link, which appears first in DOM)
+            // Prefer getting URL from the .film-name a element (same as title source)
+            const titleLinkEl = el.querySelector('.film-name a');
+            // Fallback: poster link with specific class
+            const posterLinkEl = el.querySelector('a.film-poster-ahref, a.film-poster');
+            // Last resort: any link with href
+            const anyLinkEl = el.querySelector('a[href]');
+            // Title comes from .film-name a or .film-name (NOT from the poster link)
             const titleEl = el.querySelector('.film-name a, .film-name, h3 a');
             const imgEl = el.querySelector('img.film-poster-img, img');
             const epEl = el.querySelector('.tick-eps, .ep-count, .tick-item:last-child');
             const title = titleEl?.getAttribute('title') || titleEl?.textContent?.trim() || imgEl?.getAttribute('alt');
-            const url = urlEl?.getAttribute('href');
+            let url = titleLinkEl?.getAttribute('href') || posterLinkEl?.getAttribute('href') || anyLinkEl?.getAttribute('href');
+            // Validate URL: skip non-anime links (ads, trackers, social media, etc.)
+            if (url) {
+                const isAnimeUrl = /\/\d+-[\w-]+\.html/.test(url) || /\/anime-/i.test(url) || /\/catalogue\//i.test(url);
+                if (!isAnimeUrl) url = undefined;
+            }
             const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
             const ep = epEl?.textContent.trim();
             return { title, url, posterUrl: fixUrl(posterUrl), ep };
@@ -425,7 +436,12 @@ async function getHome(cb) {
             const titleEl = el.querySelector('.film-title, .dynamic-name');
             const imgEl = el.querySelector('img.film-poster-img, img');
             const title = titleEl?.textContent.trim();
-            const url = linkEl?.getAttribute('href');
+            let url = linkEl?.getAttribute('href');
+            // Validate URL: skip non-anime links
+            if (url) {
+                const isAnimeUrl = /\/\d+-[\w-]+\.html/.test(url) || /\/anime-/i.test(url) || /\/catalogue\//i.test(url);
+                if (!isAnimeUrl) url = undefined;
+            }
             const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
             return { title, url, posterUrl: fixUrl(posterUrl) };
         }
@@ -706,36 +722,63 @@ async function search(query, cb) {
 function detectSeasonAndType(name) {
         let season = undefined;
         let contentType = undefined;
-        if (name) {
-            const sMatch = name.match(/(?:saison|season|part|cour|s)\s*(\d+)/i);
+        if (!name) return { season, contentType };
+        // Strip dub labels first like parseSeasonInfo does
+        let n = name.trim().replace(/\s*[\[(]?(?:VF|VOSTFR|VOST|VO|DUB|SUB)[\])]?\s*/gi, ' ').replace(/\s+/g, ' ').trim();
+        // Detect content type
+        if (/\b(?:oav|ova|ona)\b/i.test(n)) contentType = 'OAV';
+        else if (/\b(?:film|movie)\b/i.test(n)) contentType = 'Film';
+        else if (/\b(?:sp[ée]cial|special)\b/i.test(n)) contentType = 'Spécial';
+        // Try SxxExx pattern first
+        const s00Match = n.match(/S(\d+)E\d+/i);
+        if (s00Match) season = parseInt(s00Match[1]);
+        // Try known keywords with word boundaries (more precise than old regex)
+        if (season === undefined) {
+            const sMatch = n.match(/(?:\b(?:saison|season|part|cour|oav|ova|ona|sp[ée]cial|special|volume|vol)\s+|\bS\s*)(\d+)\b/i);
             if (sMatch) season = parseInt(sMatch[1]);
-            const s00Match = name.match(/S(\d+)E\d+/i);
-            if (s00Match) season = parseInt(s00Match[1]);
-            if (/\b(?:oav|ova|ona)\b/i.test(name)) contentType = 'OAV';
-            else if (/\bfilm\b/i.test(name)) contentType = 'Film';
-            else if (/\b(?:special|spécial)\b/i.test(name)) contentType = 'Spécial';
+        }
+        // Fallback: take first number if present, no content type, and title is not an episode ref
+        if (season === undefined && !contentType) {
+            const numMatch = n.match(/\d+/);
+            // Don't extract season number from episode titles ("Épisode 1" → episode number, not season 1)
+            // Use Unicode-safe pattern since \b doesn't work with accented chars in JS
+            if (numMatch && !/(?:^|[\s\W])[ÉéEe]p(?:isode)?(?:$|[\s\W])/i.test(n)) {
+                season = parseInt(numMatch[0]);
+            }
         }
         return { season, contentType };
     }
 
 // Parse season info from a SEASON title (not episode title)
 // e.g. "Saison 1" → { season: 1 }, "Film" → { contentType: 'Film' }, "OAV 2" → { season: 2, contentType: 'OAV' }
+// Parse season info from a SEASON title (not episode title)
+// e.g. "Saison 1" → { season: 1 }, "Film" → { contentType: 'Film' }, "OAV 2" → { season: 2, contentType: 'OAV' }
+// Strips VF/VOSTFR labels before parsing to avoid interference with detection
 function parseSeasonInfo(title) {
     let season = undefined;
     let contentType = undefined;
     if (!title) return { season, contentType };
-    const t = title.trim();
-    // Detect content type from season title first
+    // Strip dub status labels that some sites append to season titles
+    let t = title.trim().replace(/\s*[\[(]?(?:VF|VOSTFR|VOST|VO|DUB|SUB)[\])]?\s*/gi, ' ').replace(/\s+/g, ' ').trim();
+    if (!t) return { season, contentType };
+    // Detect content type: OAV/OVA/ONA, Film, Spécial
     if (/\b(?:oav|ova|ona)\b/i.test(t)) contentType = 'OAV';
-    else if (/\bfilm\b/i.test(t)) contentType = 'Film';
-    else if (/\b(?:special|spécial)\b/i.test(t)) contentType = 'Spécial';
-    // Extract season number: "Saison 1", "Season 2", "Part 3", "Cour 4", "S 5", "Film 2", "OAV 3"
-    const sMatch = t.match(/(?:saison|season|part|cour|s|film|oav|ova|ona|special|sp[ée]cial)\s*(\d+)/i);
+    else if (/\b(?:film|movie|film\s*anim[ée])\b/i.test(t)) contentType = 'Film';
+    else if (/\b(?:sp[ée]cial|special)\b/i.test(t)) contentType = 'Spécial';
+    // Extract season number from known patterns with word boundaries
+    // Patterns: "Saison 1", "Season 2", "Part 3", "Cour 4", "S 5", "Film 2", "OAV 3"
+    // Also catches trailing numbers like "Saison 2 VF" → "Saison 2" → season=2
+    const sMatch = t.match(/(?:\b(?:saison|season|part|cour|film|oav|ova|ona|sp[ée]cial|special|episode|ep|volume|vol|tome)\s+|\bS\s*)(\d+)\b/i);
     if (sMatch) season = parseInt(sMatch[1]);
-    // If no explicit number but has a digit, use it as season number
+    // If no explicit season keyword but a lone number exists (e.g. title is just "1" or "Saison 1er")
     if (season === undefined) {
         const numMatch = t.match(/\d+/);
-        if (numMatch && !contentType) season = parseInt(numMatch[0]);
+        if (numMatch) {
+            const num = parseInt(numMatch[0]);
+            // Only assign season number if no content type was detected (to avoid "Film" getting season=1)
+            // OR if content type was already paired with a number (e.g. "Film 2" already captured above)
+            if (!contentType) season = num;
+        }
     }
     return { season, contentType };
 }
@@ -752,17 +795,15 @@ function getDubStatusFromPageUrl(pageUrl) {
         if (/\/anime-vf\b|[-_]vf(?!o)/i.test(pageUrl)) return 'dub';
         if (/\/anime-vostfr\b|[-_]vostfr/i.test(pageUrl)) return 'sub';
         return undefined;
-    }
-
-// Detect if the current version is VF or VOSTFR and try to find the alternative from the page HTML
+    }    // Detect if the current version is VF or VOSTFR and try to find the alternative from the page HTML
 function findAlternativeVersionFromPage(html, currentUrl) {
         const lowerUrl = currentUrl.toLowerCase();
         let currentVersion = null;
         let alternativeUrl = null;
 
-        if (/\/vostfr|[-_]vostfr/i.test(lowerUrl)) {
+        if (/\/vostfr|[-_]vostfr|\bvostfr\b/i.test(lowerUrl)) {
             currentVersion = 'VOSTFR';
-        } else if (/\/vf|[-_]vf(?!o)/i.test(lowerUrl)) {
+        } else if (/\/vf|[-_]vf(?!o)|\bvf\b(?!o)/i.test(lowerUrl)) {
             currentVersion = 'VF';
         }
         if (!currentVersion) return { currentVersion: null, alternativeUrl: null };
@@ -771,13 +812,22 @@ function findAlternativeVersionFromPage(html, currentUrl) {
         const slugMatch = currentUrl.match(/\/\d+-([\w-]+)\.html/i);
         let animeKey = slugMatch ? slugMatch[1].toLowerCase() : '';
         // Strip known suffixes to get core anime name
-        animeKey = animeKey.replace(/[-_](vf|vostfr|dll|au)$/gi, '').replace(/[-_](vf|vostfr|dll|au)$/gi, '');
+        while (animeKey.match(/[-_](vf|vostfr|vost|vo|dll|au)$/i)) {
+            animeKey = animeKey.replace(/[-_](vf|vostfr|vost|vo|dll|au)$/gi, '');
+        }
+        if (!animeKey) return { currentVersion, alternativeUrl: null };
 
-        // Search the raw HTML for a link to the alternative version of the SAME anime
-        if (animeKey && typeof html === 'string') {
-            const regex = currentVersion === 'VOSTFR'
-                ? new RegExp('href=["\']([^"\']*\\/anime[-_]vf\\/\\d+-[^"]*' + animeKey + '[^"\']*)["\']', 'gi')
-                : new RegExp('href=["\']([^"\']*\\/anime[-_]vostfr\\/\\d+-[^"]*' + animeKey + '[^"\']*)["\']', 'gi');
+        // Try multiple URL patterns to find the alternative version
+        // Patterns: /anime-vf/1234-name, /anime_vf/1234-name, /vf/1234-name, /categorie-vf/..., etc.
+        const altPath = currentVersion === 'VOSTFR' ? 'vf' : 'vostfr';
+        const urlPatterns = [
+            // Non-greedy [^"']+? to avoid matching the entire URL before the expected pattern
+            new RegExp('href=["\']([^"\']*?/anime[-_]' + altPath + '/\\d+-[^"\']*' + animeKey + '[^"\']*)["\']', 'gi'),
+            new RegExp('href=["\']([^"\']*?/' + altPath + '/\\d+-[^"\']*' + animeKey + '[^"\']*)["\']', 'gi'),
+            new RegExp('href=["\']([^"\']*' + animeKey + '[-_]' + altPath + '[^"\']*\.html)["\']', 'gi'),
+        ];
+        for (const regex of urlPatterns) {
+            if (alternativeUrl) break;
             const m = regex.exec(html);
             if (m && m[1]) {
                 const href = m[1];
@@ -834,16 +884,35 @@ async function load(url, cb) {
         const seenEpUrls = new Set();
         // Parse seasons from block_area-seasons section
         const seasonLinks = [];
-        doc.querySelectorAll('.block_area-seasons .os-item, .block_area-seasons a[href*="/anime-"]').forEach(a => {
-            const href = a.getAttribute('href');
-            if (href) {
+        // Multiple selectors to adapt to different website layouts
+        const seasonSelectors = [
+            '.block_area-seasons .os-item',
+            '.block_area-seasons a[href*="/anime-"]',
+            '.seasons a[href*="/anime-"]',
+            'a.os-item',
+            '.season-list a[href]',
+            '#seasons a[href*="-"]',
+            '.anime-seasons a[href*="-"]'
+        ];
+        const seenSeasonIds = new Set();
+        for (const sel of seasonSelectors) {
+            if (seasonLinks.length > 0) break;
+            doc.querySelectorAll(sel).forEach(a => {
+                const href = a.getAttribute('href');
+                if (!href) return;
                 const sId = href.match(/\/(\d+)-/)?.[1];
-                const sTitle = a.getAttribute('title') || a.querySelector('.title')?.textContent.trim() || a.textContent.trim();
-                if (sId && !seasonLinks.find(s => s.id === sId)) {
-                    seasonLinks.push({ id: sId, url: href.startsWith('http') ? href : baseUrl + href, title: sTitle });
+                if (!sId || seenSeasonIds.has(sId)) return;
+                seenSeasonIds.add(sId);
+                // Extract title with careful cleanup
+                let sTitle = a.getAttribute('title') || '';
+                if (!sTitle.trim()) {
+                    const childTitle = a.querySelector('.title, .season-title, .name');
+                    sTitle = childTitle ? childTitle.textContent.trim() : a.textContent.trim();
                 }
-            }
-        });
+                sTitle = sTitle.replace(/<[^>]+>/g, '').trim();
+                seasonLinks.push({ id: sId, url: href.startsWith('http') ? href : baseUrl + href, title: sTitle });
+            });
+        }
         // Always include current page as first season if not already found
         if (movieId && !seasonLinks.find(s => s.id === movieId)) {
             seasonLinks.unshift({ id: movieId, url: url, title: '' });
@@ -865,6 +934,29 @@ async function load(url, cb) {
             ...sInfo,
             parsedInfo: parseSeasonInfo(sInfo.title)
         }));
+        // Helper: extract episode anchor tags from HTML fragment using multiple regex patterns
+        function extractEpisodeAnchors(htmlFrag) {
+            const anchors = [];
+            // Multiple patterns to handle different HTML structures
+            const epPatterns = [
+                // Class-based: class="ep-item" or class="...ep-item..."
+                /<a [^>]*class=["'][^"']*\bep-item\b[^"']*["'][^>]*>/gi,
+                // Class-based: class="...episode..."
+                /<a [^>]*class=["'][^"']*\bepisode\b[^"']*["'][^>]*>/gi,
+                // data-episode-id or data-number attribute (common in streaming sites)
+                /<a [^>]*(?:data-episode-id|data-number|data-ep)[=]["'][^"']*["'][^>]*href=["'][^"']+["'][^>]*>/gi,
+                // Simple anchor with href inside an episode container (generic fallback)
+                /<a [^>]*href=["'][^"']*(?:episode|ep-|/ep/|watch)[^"']*["'][^>]*>/gi,
+            ];
+            for (const pattern of epPatterns) {
+                if (anchors.length > 0) break;
+                let m;
+                while ((m = pattern.exec(htmlFrag)) !== null) {
+                    anchors.push(m[0]);
+                }
+            }
+            return anchors;
+        }
         // Parse episodes for each season with automatic numbering
         for (let sIdx = 0; sIdx < seasonInfos.length; sIdx++) {
             const sInfo = seasonInfos[sIdx];
@@ -872,13 +964,13 @@ async function load(url, cb) {
             if (!sData) continue;
             let htmlFrag = typeof sData === 'string' ? sData : (sData.html || sData.data?.html || '');
             htmlFrag = htmlFrag.replace(/\\"/g, '"').replace(/\\'/g, "'").replace(/\\\//g, '/');
-            const epRegex = /<a [^>]*class=["'][^"']*ep-item[^"']*["'][^>]*>/gi;
-            let match;
-            while ((match = epRegex.exec(htmlFrag)) !== null) {
-                const aTag = match[0];
+            const epAnchors = extractEpisodeAnchors(htmlFrag);
+            for (const aTag of epAnchors) {
                 const epUrl = aTag.match(/href=["']([^"']+)["']/)?.[1];
-                const epNum = aTag.match(/data-number=["'](\d+)["']/)?.[1] || "1";
-                const epTitle = aTag.match(/title=["']([^"']+)["']/)?.[1];
+                const epNum = aTag.match(/data-number=["'](\d+)["']/)?.[1] || 
+                    aTag.match(/data-episode-id=["'](\d+)["']/)?.[1] || "1";
+                const epTitle = aTag.match(/title=["']([^"']+)["']/)?.[1] || 
+                    aTag.match(/>\s*([^<]{1,100})\s*<\/a>/)?.[1];
                 if (epUrl) {
                     const fullEpUrl = epUrl.startsWith('http') ? epUrl : baseUrl + epUrl;
                     if (seenEpUrls.has(fullEpUrl)) continue;
@@ -910,16 +1002,33 @@ async function load(url, cb) {
                     const altDoc = await parseHtml(altRes.data);
                     // Parse alternative version's seasons
                     const altSeasonLinks = [];
-                    altDoc.querySelectorAll('.block_area-seasons .os-item, .block_area-seasons a[href*="/anime-"]').forEach(a => {
-                        const href = a.getAttribute('href');
-                        if (href) {
+                    const altSeasonSelectors = [
+                        '.block_area-seasons .os-item',
+                        '.block_area-seasons a[href*="/anime-"]',
+                        '.seasons a[href*="/anime-"]',
+                        'a.os-item',
+                        '.season-list a[href]',
+                        '#seasons a[href*="-"]',
+                        '.anime-seasons a[href*="-"]'
+                    ];
+                    const altSeenIds = new Set();
+                    for (const sel of altSeasonSelectors) {
+                        if (altSeasonLinks.length > 0) break;
+                        altDoc.querySelectorAll(sel).forEach(a => {
+                            const href = a.getAttribute('href');
+                            if (!href) return;
                             const sId = href.match(/\/(\d+)-/)?.[1];
-                            const sTitle = a.getAttribute('title') || a.querySelector('.title')?.textContent.trim() || a.textContent.trim();
-                            if (sId && !altSeasonLinks.find(s => s.id === sId)) {
-                                altSeasonLinks.push({ id: sId, url: href.startsWith('http') ? href : baseUrl + href, title: sTitle });
+                            if (!sId || altSeenIds.has(sId)) return;
+                            altSeenIds.add(sId);
+                            let sTitle = a.getAttribute('title') || '';
+                            if (!sTitle.trim()) {
+                                const childTitle = a.querySelector('.title, .season-title, .name');
+                                sTitle = childTitle ? childTitle.textContent.trim() : a.textContent.trim();
                             }
-                        }
-                    });
+                            sTitle = sTitle.replace(/<[^>]+>/g, '').trim();
+                            altSeasonLinks.push({ id: sId, url: href.startsWith('http') ? href : baseUrl + href, title: sTitle });
+                        });
+                    }
                     // Fallback: use the alternative page itself if no season links found
                     const altMovieId = fullAltUrl.match(/\/(\d+)-/)?.[1];
                     if (altSeasonLinks.length === 0 && altMovieId) {
@@ -965,13 +1074,14 @@ async function load(url, cb) {
                         if (!altData) continue;
                         let altHtmlFrag = typeof altData === 'string' ? altData : (altData.html || altData.data?.html || '');
                         altHtmlFrag = altHtmlFrag.replace(/\\"/g, '"').replace(/\\'/g, "'").replace(/\\\//g, '/');
-                        const altEpRegex = /<a [^>]*class=["'][^"']*ep-item[^"']*["'][^>]*>/gi;
-                        let altMatch;
-                        while ((altMatch = altEpRegex.exec(altHtmlFrag)) !== null) {
-                            const aTag = altMatch[0];
+                        // Use same flexible episode anchor extraction
+                        const altEpAnchors = extractEpisodeAnchors(altHtmlFrag);
+                        for (const aTag of altEpAnchors) {
                             const epUrl = aTag.match(/href=["']([^"']+)["']/)?.[1];
-                            const epNum = aTag.match(/data-number=["'](\d+)["']/)?.[1] || "1";
-                            const epTitle = aTag.match(/title=["']([^"']+)["']/)?.[1];
+                            const epNum = aTag.match(/data-number=["'](\d+)["']/)?.[1] || 
+                                aTag.match(/data-episode-id=["'](\d+)["']/)?.[1] || "1";
+                            const epTitle = aTag.match(/title=["']([^"']+)["']/)?.[1] || 
+                                aTag.match(/>\s*([^<]{1,100})\s*<\/a>/)?.[1];
                             if (epUrl) {
                                 const fullEpUrl = epUrl.startsWith('http') ? epUrl : baseUrl + epUrl;
                                 if (seenEpUrls.has(fullEpUrl)) continue;
@@ -1007,12 +1117,13 @@ async function load(url, cb) {
                 dubStatus: detectDubStatus(url, title)
             }));
         }
-        // Extract recommendations from related/similar anime sections
+        // ── Extract recommendations from related/similar anime sections ──
         const recommendations = [];
         const recSeenUrls = new Set();
-        // movieId already extracted above from url.match(/\/(\d+)-/) for precise exclusion
-        // Multiple selector strategies for animesultra's layout
+        // Movie ID extracted above for precise exclusion
+        // Ultra-wide set of selectors to match different website layouts
         const recSelectors = [
+            // Standard layout patterns
             '.block_area-recommend .flw-item',
             '.block_area_ral .flw-item',
             '.film-related .flw-item',
@@ -1021,37 +1132,102 @@ async function load(url, cb) {
             '.block_area[class*="ral"] .flw-item',
             '.block_area[class*="related"] .flw-item',
             '.block_area[class*="similar"] .flw-item',
-            // Fallback: sidebar or secondary block areas
-            '.sidebar .flw-item',
+            // Generic block areas with film items
             '.block_area-section .flw-item',
+            // Sidebar patterns
+            '.sidebar .flw-item',
+            '#sidebar .flw-item',
+            '.widget .flw-item',
+            // Related/recommended sections (generic)
+            '[class*="recommend"] .flw-item',
+            '[class*="related"] .flw-item',
+            '[class*="similar"] .flw-item',
+            '[class*="ral"] .flw-item',
+            '[class*="suggestion"] .flw-item',
+            // Page-item-detail (Dooplay theme)
+            '.page-item-detail',
+            // TPostMv (Toroplay theme)
+            '.TPostMv',
+            '.TPost.C',
+            '.TPost',
+            // Mov items (DLE/french-anime themes)
+            '.mov.clearfix',
+            '.mov',
+            // Section items
+            'section .flw-item',
+            // Any list of linked items in the page body (broad fallback - DO NOT use this for body-level)
         ];
+        // Helper to extract recommendation from a generic element
+        function extractRecItem(el) {
+            const linkEl = el.tagName === 'A' ? el : (el.querySelector('.film-name a, a.film-poster-ahref, a[href]') || el.querySelector('a'));
+            if (!linkEl) return null;
+            const imgEl = el.querySelector('img.film-poster-img') || el.querySelector('img');
+            const titleEl = linkEl || el.querySelector('.film-name, .film-title, .post-title, h3, h4');
+            const recTitle = titleEl?.getAttribute('title') || titleEl?.textContent?.trim() || imgEl?.getAttribute('alt');
+            const rawRecUrl = linkEl.getAttribute('href');
+            const recPoster = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src');
+            if (!recTitle || !rawRecUrl || rawRecUrl.includes('#') || rawRecUrl.includes('javascript:')) return null;
+            const recUrl = rawRecUrl.startsWith('http') ? rawRecUrl : baseUrl + rawRecUrl;
+            if (recSeenUrls.has(recUrl)) return null;
+            recSeenUrls.add(recUrl);
+            // Exclude current anime by its numeric ID and URL
+            if (movieId) {
+                const recId = rawRecUrl.match(/\/(\d+)-/)?.[1];
+                if (recId === movieId) return null;
+            }
+            if (rawRecUrl === url || recUrl === url) return null;
+            return new MultimediaItem({
+                title: recTitle,
+                url: recUrl,
+                posterUrl: fixUrl(recPoster),
+                type: 'anime'
+            });
+        }
         for (const sel of recSelectors) {
             if (recommendations.length >= 20) break;
             doc.querySelectorAll(sel).forEach(el => {
                 if (recommendations.length >= 20) return;
-                const linkEl = el.querySelector('.film-name a, a.film-poster-ahref, a[href]');
-                const imgEl = el.querySelector('img.film-poster-img, img');
-                const titleEl = linkEl || el.querySelector('.film-name');
-                const recTitle = titleEl?.getAttribute('title') || titleEl?.textContent?.trim();
-                const rawRecUrl = linkEl?.getAttribute('href');
-                const recPoster = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
-                if (recTitle && rawRecUrl) {
-                    // Normalize URL to absolute for consistent dedup
-                    const recUrl = rawRecUrl.startsWith('http') ? rawRecUrl : baseUrl + rawRecUrl;
-                    if (recSeenUrls.has(recUrl)) return;
-                    recSeenUrls.add(recUrl);
-                    // Exclude current anime by its numeric ID
-                    const recId = rawRecUrl.match(/\/(\d+)-/)?.[1];
-                    if (recId && recId === movieId) return;
-                    recommendations.push(new MultimediaItem({
-                        title: recTitle,
-                        url: recUrl,
-                        posterUrl: fixUrl(recPoster),
-                        type: 'anime'
-                    }));
-                }
+                const item = extractRecItem(el);
+                if (item) recommendations.push(item);
             });
             if (recommendations.length > 0) break;
+        }
+        // ── Fallback 1: Try to find recommendations from sidebar blocks that contain anime links ──
+        if (recommendations.length === 0) {
+            // Look for heading text like "Recommandations", "Similaires", "Vous aimerez aussi"
+            const headingKeywords = /recommand|recommend|similaire|related|suggestion|vous aimerez|autre|also like|popular|tendance|top/i;
+            doc.querySelectorAll('h2, h3, h4, .heading, .block_area-header h2, .cat-heading').forEach(heading => {
+                if (recommendations.length >= 10) return;
+                const headingText = heading.textContent.trim();
+                if (!headingKeywords.test(headingText)) return;
+                // Walk up to find a container, then find items
+                let container = heading.closest('.block_area, section, div') || heading.parentElement;
+                if (!container) return;
+                container.querySelectorAll('.flw-item, .page-item-detail, .TPostMv, .TPost.C, .TPost, .mov, .item').forEach(el => {
+                    if (recommendations.length >= 10) return;
+                    const item = extractRecItem(el);
+                    if (item) recommendations.push(item);
+                });
+            });
+        }
+        // ── Fallback 2: Genre-based recommendations using the search engine ──
+        if (recommendations.length === 0 && genreEls && genreEls.length > 0 && title) {
+            // Use the first genre to find similar anime
+            const query = genreEls[0];
+            try {
+                const searchRes = await new Promise(resolve => search(query, resolve));
+                if (searchRes.success && searchRes.data) {
+                    for (const item of searchRes.data) {
+                        if (recommendations.length >= 10) break;
+                        if (recSeenUrls.has(item.url)) continue;
+                        recSeenUrls.add(item.url);
+                        // Exclude current anime
+                        if (item.title === title) continue;
+                        if (movieId && item.url.match(/\/(\d+)-/)?.[1] === movieId) continue;
+                        recommendations.push(item);
+                    }
+                }
+            } catch (e) { /* Genre search failed, skip */ }
         }
 
         cb({ success: true, data: new MultimediaItem({ type: "anime", title, description, posterUrl, episodes, year, status, genres: genreEls.length > 0 ? genreEls : undefined, recommendations: recommendations.length > 0 ? recommendations : undefined }) });

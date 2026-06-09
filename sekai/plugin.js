@@ -102,14 +102,22 @@ async function getHome(cb) {
         slides.forEach(slide => {
             const link = slide.querySelector('a');
             if (!link) return;
-            const href = link.getAttribute('href');
             const titleEl = slide.querySelector('.series-name');
             const descEl = slide.querySelector('.swiper-description');
             const title = titleEl ? titleEl.textContent.trim() : (link.getAttribute('title') || link.textContent.trim());
             const description = descEl?.querySelector('p')?.textContent.trim();
             const imgEl = slide.querySelector('img');
             const posterUrl = imgEl ? (imgEl.getAttribute('src') || imgEl.getAttribute('data-src')) : '';
+            // URL from title link first (same element as title), then fallback to first link
+            let href = (titleEl?.querySelector('a') || link)?.getAttribute('href');
+            // Validate URL: skip non-anime links — valid slugs are alphanumeric with hyphens
             if (href && !href.startsWith('http') && !href.startsWith('/') && href !== 'android' && href !== 'contact') {
+                // Additional validation: must look like an anime slug (alphanumeric + hyphens, min 2 chars)
+                if (!/^[a-z0-9][a-z0-9-]+$/i.test(href)) href = undefined;
+            } else {
+                href = undefined;
+            }
+            if (href) {
                 const fullUrl = baseUrl + '/' + href;
                 if (!seenUrls.has(fullUrl)) {
                     seenUrls.add(fullUrl);
@@ -133,15 +141,18 @@ async function getHome(cb) {
             const title = match[1];
             let posterUrl = match[2];
             let href = match[3];
-            const fullUrl = baseUrl + '/' + href;
-            if (!seenUrls.has(fullUrl) && href && !href.startsWith('http') && !href.startsWith('/') && href !== 'android' && href !== 'contact') {
-                seenUrls.add(fullUrl);
-                catalogue.push(new MultimediaItem({
-                    title: (title)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
-                    url: fullUrl,
-                    posterUrl: (function (p) { if (!p) return ''; if (p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : ''),
-                    type: 'anime', playbackPolicy: 'none'
-                }));
+            // Validate URL: skip non-anime entries
+            if (href && !href.startsWith('http') && !href.startsWith('/') && href !== 'android' && href !== 'contact' && /^[a-z0-9][a-z0-9-]+$/i.test(href)) {
+                const fullUrl = baseUrl + '/' + href;
+                if (!seenUrls.has(fullUrl)) {
+                    seenUrls.add(fullUrl);
+                    catalogue.push(new MultimediaItem({
+                        title: (title)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
+                        url: fullUrl,
+                        posterUrl: (function (p) { if (!p) return ''; if (p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : ''),
+                        type: 'anime', playbackPolicy: 'none'
+                    }));
+                }
             }
         }
         if (catalogue.length > 0) results['Catalogue Sekai'] = catalogue;
@@ -218,14 +229,22 @@ async function search(query, cb) {
 function detectSeasonAndType(name) {
         let season = undefined;
         let contentType = undefined;
-        if (name) {
-            const sMatch = name.match(/(?:saison|season|s)\s*(\d+)/i);
+        if (!name) return { season, contentType };
+        let n = name.trim().replace(/\s*[\[(]?(?:VF|VOSTFR|VOST|VO|DUB|SUB)[\])]?\s*/gi, ' ').replace(/\s+/g, ' ').trim();
+        if (/\b(?:oav|ova)\b/i.test(n)) contentType = 'OAV';
+        else if (/\b(?:film|movie)\b/i.test(n)) contentType = 'Film';
+        else if (/\b(?:sp[ée]cial|special)\b/i.test(n)) contentType = 'Spécial';
+        const s00Match = n.match(/S(\d+)E\d+/i);
+        if (s00Match) season = parseInt(s00Match[1]);
+        if (season === undefined) {
+            const sMatch = n.match(/(?:\b(?:saison|season|part|cour|oav|ova|sp[ée]cial|special|volume|vol)\s+|\bS\s*)(\d+)\b/i);
             if (sMatch) season = parseInt(sMatch[1]);
-            const s00Match = name.match(/S(\d+)E\d+/i);
-            if (s00Match) season = parseInt(s00Match[1]);
-            if (/\b(?:oav|ova)\b/i.test(name)) contentType = 'OAV';
-            else if (/\bfilm\b/i.test(name)) contentType = 'Film';
-            else if (/\b(?:special|spécial)\b/i.test(name)) contentType = 'Spécial';
+        }
+        if (season === undefined && !contentType) {
+            const numMatch = n.match(/\d+/);
+            if (numMatch && !/(?:^|[\s\W])[ÉéEe]p(?:isode)?(?:$|[\s\W])/i.test(n)) {
+                season = parseInt(numMatch[0]);
+            }
         }
         return { season, contentType };
     }

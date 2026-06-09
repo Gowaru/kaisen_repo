@@ -447,14 +447,22 @@ async function search(query, cb) {
 function detectSeasonAndType(name) {
         let season = undefined;
         let contentType = undefined;
-        if (name) {
-            const sMatch = name.match(/(?:saison|season|s)\s*(\d+)/i);
+        if (!name) return { season, contentType };
+        let n = name.trim().replace(/\s*[\[(]?(?:VF|VOSTFR|VOST|VO|DUB|SUB)[\])]?\s*/gi, ' ').replace(/\s+/g, ' ').trim();
+        if (/\b(?:oav|ova)\b/i.test(n)) contentType = 'OAV';
+        else if (/\b(?:film|movie)\b/i.test(n)) contentType = 'Film';
+        else if (/\b(?:sp[ée]cial|special)\b/i.test(n)) contentType = 'Spécial';
+        const s00Match = n.match(/S(\d+)E\d+/i);
+        if (s00Match) season = parseInt(s00Match[1]);
+        if (season === undefined) {
+            const sMatch = n.match(/(?:\b(?:saison|season|part|cour|oav|ova|sp[ée]cial|special|volume|vol)\s+|\bS\s*)(\d+)\b/i);
             if (sMatch) season = parseInt(sMatch[1]);
-            const s00Match = name.match(/S(\d+)E\d+/i);
-            if (s00Match) season = parseInt(s00Match[1]);
-            if (/\b(?:oav|ova)\b/i.test(name)) contentType = 'OAV';
-            else if (/\bfilm\b/i.test(name)) contentType = 'Film';
-            else if (/\b(?:special|spécial)\b/i.test(name)) contentType = 'Spécial';
+        }
+        if (season === undefined && !contentType) {
+            const numMatch = n.match(/\d+/);
+            if (numMatch && !/(?:^|[\s\W])[ÉéEe]p(?:isode)?(?:$|[\s\W])/i.test(n)) {
+                season = parseInt(numMatch[0]);
+            }
         }
         return { season, contentType };
     }
