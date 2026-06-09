@@ -210,6 +210,47 @@ const Extractors = {
             return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Myvi', headers: { 'Referer': baseUrl } });
         }
 
+        // --- Uqload ---
+        if (url.includes('uqload')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                if (typeof res.data === 'string') {
+                    const match = res.data.match(/sources:\s*\["([^"]+)"\]/i) ||
+                        res.data.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                        res.data.match(/file:"([^"]+)"/i) ||
+                        res.data.match(/<source\s+src=["']([^"']+)["']/i);
+                    if (match) {
+                        let videoUrl = match[1];
+                        if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                        return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl), quality: 'Auto', source: 'Uqload', headers: { 'Referer': url } });
+                    }
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Uqload', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- Verystream ---
+        if (url.includes('verystream')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                if (typeof res.data === 'string') {
+                    const match = res.data.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                        res.data.match(/src\s*:\s*["']([^"']+)["']/i) ||
+                        res.data.match(/<source\s+src=["']([^"']+)["']/i) ||
+                        res.data.match(/<video[^>]+src=["']([^"']+)["']/i) ||
+                        res.data.match(/href=["']([^"']+\/get\/[^"']+)["'][^>]*>Direct/i) ||
+                        res.data.match(/"url":\s*"([^"]+)"/i);
+                    if (match) {
+                        let videoUrl = match[1];
+                        videoUrl = videoUrl.replace(/&amp;/g, '&');
+                        if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                        return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl), quality: 'Auto', source: 'Verystream', headers: { 'Referer': url } });
+                    }
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Verystream', headers: { 'Referer': baseUrl } });
+        }
+
         // --- Direct video URLs ---
         if (url.match(/\.(mp4|m3u8|mkv|webm)(\?|$)/i)) {
             return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Direct', headers: { 'Referer': baseUrl } });
@@ -237,7 +278,7 @@ async function getHome(cb) {
             const title = el.querySelector('.title1')?.textContent.trim();
             const subTitle = el.querySelector('.title0')?.textContent.trim();
             const url = linkEl?.getAttribute('href');
-            const posterUrl = imgEl?.getAttribute('src') || imgEl?.getAttribute('data-src') || linkEl?.querySelector('img')?.getAttribute('src');
+            const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || linkEl?.querySelector('img')?.getAttribute('data-src') || linkEl?.querySelector('img')?.getAttribute('src');
             if (title && url && !seenUrls.has(url)) {
                 seenUrls.add(url);
                 topItems.push(new MultimediaItem({
@@ -256,7 +297,7 @@ async function getHome(cb) {
             const imgEl = el.querySelector('img');
             const title = el.querySelector('.mov-t, .mov-m')?.textContent.trim() || imgEl?.getAttribute('alt') || linkEl?.textContent.trim();
             const url = linkEl?.getAttribute('href') || linkEl?.getAttribute('data-link');
-            const posterUrl = imgEl?.getAttribute('src') || imgEl?.getAttribute('data-src') || el.querySelector('.mov-i img')?.getAttribute('src');
+            const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || el.querySelector('.mov-i img')?.getAttribute('data-src') || el.querySelector('.mov-i img')?.getAttribute('src');
             if (title && url && title.length > 2 && !seenUrls.has(url)) {
                 seenUrls.add(url);
                 const section = langEl && langEl.classList.contains('vf') ? 'Derniers Épisodes VF' : 'Derniers Épisodes VOSTFR';
@@ -281,7 +322,7 @@ async function getHome(cb) {
                 const imgEl = el.querySelector('img');
                 const title = el.querySelector('.mov-t')?.textContent.trim() || imgEl?.getAttribute('alt') || linkEl?.textContent.trim();
                 const url = linkEl?.getAttribute('href') || linkEl?.getAttribute('data-link');
-                const posterUrl = imgEl?.getAttribute('src') || imgEl?.getAttribute('data-src');
+                const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
                 if (title && url && title.length > 2 && !url.includes('#') && !seenUrls.has(url)) {
                     seenUrls.add(url);
                     items.push(new MultimediaItem({
@@ -300,7 +341,7 @@ async function getHome(cb) {
                 const title = el.textContent.trim();
                 const url = el.getAttribute('href');
                 const imgEl = el.querySelector('img');
-                const posterUrl = imgEl?.getAttribute('src') || imgEl?.getAttribute('data-src');
+                const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
                 if (title && url && !url.includes('#') && title.length > 2 && !seenUrls.has(url)) {
                     seenUrls.add(url);
                     fallbackItems.push(new MultimediaItem({
@@ -331,13 +372,13 @@ async function search(query, cb) {
             const imgEl = el.querySelector('img');
             const title = titleEl?.textContent.trim();
             const url = linkEl?.getAttribute('href');
-            const posterUrl = imgEl?.getAttribute('src') || imgEl?.getAttribute('data-src');
+            const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
             if (title && url && title.length > 1 && !seenUrls.has(url)) {
                 seenUrls.add(url);
                 items.push(new MultimediaItem({
                     title,
                     url: url.startsWith('http') ? url : baseUrl + url,
-                    posterUrl: posterUrl,
+                    posterUrl: fixUrl(posterUrl),
                     type: 'anime', playbackPolicy: 'none'
                 }));
             }
@@ -349,7 +390,7 @@ async function search(query, cb) {
                 const linkEl = el.querySelector('a');
                 const title = el.querySelector('h2, h3, h4')?.textContent.trim() || linkEl?.textContent.trim();
                 const url = linkEl?.getAttribute('href');
-                const posterUrl = el.querySelector('img')?.getAttribute('src') || el.querySelector('img')?.getAttribute('data-src');
+                const posterUrl = el.querySelector('img')?.getAttribute('data-src') || el.querySelector('img')?.getAttribute('src');
                 if (title && url && title.length > 1 && !seenUrls.has(url)) {
                     seenUrls.add(url);
                     items.push(new MultimediaItem({
@@ -521,7 +562,7 @@ async function load(url, cb) {
                 const titleEl = el.querySelector('.mov-t, a.mov-t');
                 const recTitle = titleEl?.textContent.trim() || linkEl?.getAttribute('title');
                 const recUrl = linkEl?.getAttribute('data-link') || linkEl?.getAttribute('href');
-                const recPoster = imgEl?.getAttribute('src') || imgEl?.getAttribute('data-src');
+                const recPoster = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
                 if (recTitle && recUrl) {
                     recommendations.push(new MultimediaItem({
                         title: recTitle,

@@ -190,6 +190,62 @@ const Extractors = {
             return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Minochinos', headers: { 'Referer': baseUrl } });
         }
 
+        // --- Myvi.ru ---
+        if (url.includes('myvi.ru')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                const vidMatch = html.match(/videoUrl["']?\s*:\s*["'](https?:\/\/[^"']+\.mp4[^"']*)["']/i) ||
+                    html.match(/src["']?\s*:\s*["'](https?:\/\/[^"']+\.mp4[^"']*)["']/i) ||
+                    html.match(/file["']?\s*:\s*["'](https?:\/\/[^"']+\.mp4[^"']*)["']/i);
+                if (vidMatch) {
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(vidMatch[1]), quality: 'Auto', source: 'Myvi', headers: { 'Referer': url } });
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Myvi', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- Uqload ---
+        if (url.includes('uqload')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                if (typeof res.data === 'string') {
+                    const match = res.data.match(/sources:\s*\["([^"]+)"\]/i) ||
+                        res.data.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                        res.data.match(/file:"([^"]+)"/i) ||
+                        res.data.match(/<source\s+src=["']([^"']+)["']/i);
+                    if (match) {
+                        let videoUrl = match[1];
+                        if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                        return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl), quality: 'Auto', source: 'Uqload', headers: { 'Referer': url } });
+                    }
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Uqload', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- Verystream ---
+        if (url.includes('verystream')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                if (typeof res.data === 'string') {
+                    const match = res.data.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                        res.data.match(/src\s*:\s*["']([^"']+)["']/i) ||
+                        res.data.match(/<source\s+src=["']([^"']+)["']/i) ||
+                        res.data.match(/<video[^>]+src=["']([^"']+)["']/i) ||
+                        res.data.match(/href=["']([^"']+\/get\/[^"']+)["'][^>]*>Direct/i) ||
+                        res.data.match(/"url":\s*"([^"]+)"/i);
+                    if (match) {
+                        let videoUrl = match[1];
+                        videoUrl = videoUrl.replace(/&amp;/g, '&');
+                        if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                        return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl), quality: 'Auto', source: 'Verystream', headers: { 'Referer': url } });
+                    }
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Verystream', headers: { 'Referer': baseUrl } });
+        }
+
         // --- Embed4Me / Lplayer ---
         if (url.includes('embed4me') || url.includes('lpayer')) {
             return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Embed4Me', headers: { 'Referer': baseUrl } });

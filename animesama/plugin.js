@@ -284,6 +284,92 @@ const Extractors = {
             });
         }
 
+        // --- Myvi.ru ---
+        if (url.includes('myvi.ru')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                const vidMatch = html.match(/videoUrl["']?\s*:\s*["'](https?:\/\/[^"']+\.mp4[^"']*)["']/i) ||
+                    html.match(/src["']?\s*:\s*["'](https?:\/\/[^"']+\.mp4[^"']*)["']/i) ||
+                    html.match(/file["']?\s*:\s*["'](https?:\/\/[^"']+\.mp4[^"']*)["']/i);
+                if (vidMatch) {
+                    return new StreamResult({
+                        url: "MAGIC_PROXY_v1" + encodeBase64(vidMatch[1]),
+                        quality: 'Auto',
+                        source: 'Myvi',
+                        headers: { 'Referer': url }
+                    });
+                }
+            } catch (e) { }
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'Myvi',
+                headers: { 'Referer': baseUrl }
+            });
+        }
+
+        // --- Uqload ---
+        if (url.includes('uqload')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                if (typeof res.data === 'string') {
+                    const match = res.data.match(/sources:\s*\["([^"]+)"\]/i) ||
+                        res.data.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                        res.data.match(/file:"([^"]+)"/i) ||
+                        res.data.match(/<source\s+src=["']([^"']+)["']/i);
+                    if (match) {
+                        let videoUrl = match[1];
+                        if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                        return new StreamResult({
+                            url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl),
+                            quality: 'Auto',
+                            source: 'Uqload',
+                            headers: { 'Referer': url }
+                        });
+                    }
+                }
+            } catch (e) { }
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'Uqload',
+                headers: { 'Referer': baseUrl }
+            });
+        }
+
+        // --- Verystream ---
+        if (url.includes('verystream')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                if (typeof res.data === 'string') {
+                    const match = res.data.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                        res.data.match(/src\s*:\s*["']([^"']+)["']/i) ||
+                        res.data.match(/<source\s+src=["']([^"']+)["']/i) ||
+                        res.data.match(/<video[^>]+src=["']([^"']+)["']/i) ||
+                        res.data.match(/href=["']([^"']+\/get\/[^"']+)["'][^>]*>Direct/i) ||
+                        res.data.match(/"url":\s*"([^"]+)"/i);
+                    if (match) {
+                        let videoUrl = match[1];
+                        videoUrl = videoUrl.replace(/&amp;/g, '&');
+                        if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                        return new StreamResult({
+                            url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl),
+                            quality: 'Auto',
+                            source: 'Verystream',
+                            headers: { 'Referer': url }
+                        });
+                    }
+                }
+            } catch (e) { }
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'Verystream',
+                headers: { 'Referer': baseUrl }
+            });
+        }
+
         // --- Embed4Me / Lpayer ---
         // SPA with AES-encrypted API + dynamic JS loading; direct extraction not feasible.
         // Falls back to MAGIC_PROXY for client-side rendering in the app's webview.
@@ -350,8 +436,8 @@ async function getHome(cb) {
             const titleM = block.match(/<h2[^>]*class="ak-slide-title"[^>]*>([^<]+)<\/h2>/i);
             if (!titleM) continue;
             const title = titleM[1].trim();
-            // Poster: try ak-slide-bg img first, then construct from title slug
-            const bgM = block.match(/ak-slide-bg[\s\S]*?<img[^>]+src="([^"]+)"/i);
+            // Poster: try ak-slide-bg img (data-src for lazy-loaded, then src), then construct from title slug
+            const bgM = block.match(/ak-slide-bg[\s\S]*?<img[^>]+(?:data-src|src)="([^"]+)"/i);
             let posterUrl = bgM ? bgM[1] : '';
             if (!posterUrl || posterUrl.includes('flag_') || posterUrl.includes('flag-')) {
                 // Construct poster from title slug (anime-sama convention)
@@ -554,7 +640,7 @@ async function search(query, cb) {
                 }
             });
             const html = response.data;
-            const regex = /<a href="([^"]+)" class="asn-search-result"><img[^>]+src="([^"]+)"[^>]*><div[^>]*><h3[^>]*>([^<]+)<\/h3>(?:[^<]*<p[^>]*>([^<]+)<\/p>)?/gi;
+            const regex = /<a href="([^"]+)" class="asn-search-result"><img[^>]+(?:data-src|src)="([^"]+)"[^>]*><div[^>]*><h3[^>]*>([^<]+)<\/h3>(?:[^<]*<p[^>]*>([^<]+)<\/p>)?/gi;
             let match;
             while ((match = regex.exec(html)) !== null && results.length < 25) {
                 if (match[1].includes('/scan/')) continue;
@@ -628,7 +714,7 @@ async function load(url, cb) {
         const html = htmlRes.data;
 
         let posterUrl = "";
-        const imgMatch = html.match(/id="imgOeuvre"[^>]*src="([^"]+)"/i) || html.match(/property="og:image"[^>]*content="([^"]+)"/i);
+        const imgMatch = html.match(/id="imgOeuvre"[^>]+(?:data-src|src)="([^"]+)"/i) || html.match(/property="og:image"[^>]*content="([^"]+)"/i);
         if (imgMatch) posterUrl = imgMatch[1];
 
         let actualTitle = "Anime-Sama";
@@ -653,70 +739,120 @@ async function load(url, cb) {
             else status = raw;
         }
 
-        const cleanHtml = html.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*panneauAnime.*$/gm, '').replace(/<!--[\s\S]*?-->/g, '');
+        // ── Parse season info from titles like animesultra ──
+        // e.g. "Saison 1" → { season: 1 }, "Film" → { contentType: 'Film' }, "OAV" → { contentType: 'OAV' }
+        function parseSeasonInfo(title) {
+            let season = undefined;
+            let contentType = undefined;
+            if (!title) return { season, contentType };
+            const t = title.trim();
+            // Detect content type
+            if (/\b(?:oav|ova|ona)\b/i.test(t)) contentType = 'OAV';
+            else if (/\bfilm\b/i.test(t)) contentType = 'Film';
+            else if (/\b(?:special|spécial)\b/i.test(t)) contentType = 'Spécial';
+            // Extract season number
+            const sMatch = t.match(/(?:saison|season|part|cour|s|film|oav|ova|ona|special|sp[ée]cial)\s*(\d+)/i);
+            if (sMatch) season = parseInt(sMatch[1]);
+            if (season === undefined) {
+                const numMatch = t.match(/\d+/);
+                if (numMatch && !contentType) season = parseInt(numMatch[0]);
+            }
+            return { season, contentType };
+        }
+
+        // ── Parse season entries grouped by TITLE (unlike old code that treated VF/VOSTFR as separate) ──
+        // Each unique season title gets ONE season with both VF and VOSTFR variants
+        const cleanedHtml = html.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*panneauAnime.*$/gm, '').replace(/<!--[\s\S]*?-->/g, '');
         const seasonRegex = /panneauAnime\s*\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']\s*\)/gi;
+        // Group by title: { title: { vfPath, vostfrPath, parsedInfo } }
+        const seasonGroup = {};
         let sMatch;
-        const seasonEntries = [];
-        while ((sMatch = seasonRegex.exec(cleanHtml)) !== null) {
+        while ((sMatch = seasonRegex.exec(cleanedHtml)) !== null) {
             const seasonTitle = sMatch[1].trim();
             const seasonPath = sMatch[2].trim();
-            if (seasonPath.includes('vf') || seasonPath.includes('vostfr')) {
-                seasonEntries.push({ title: seasonTitle, path: seasonPath });
+            // Only process entries with VF or VOSTFR in the path
+            const isVf = seasonPath.includes('/vf') || seasonPath.endsWith('vf');
+            const isVostfr = seasonPath.includes('vostfr');
+            if (!isVf && !isVostfr) continue;
+            
+            if (!seasonGroup[seasonTitle]) {
+                seasonGroup[seasonTitle] = {
+                    title: seasonTitle,
+                    parsedInfo: parseSeasonInfo(seasonTitle),
+                    vfPath: null,
+                    vostfrPath: null
+                };
+            }
+            if (isVf) seasonGroup[seasonTitle].vfPath = seasonPath;
+            if (isVostfr) seasonGroup[seasonTitle].vostfrPath = seasonPath;
+        }
 
-                // Automatically inject the opposite language if it's explicitly 'vostfr' or 'vf'
-                // This allows discovering VF links that are hidden in the player interface natively.
-                if (seasonPath.includes('vostfr')) {
-                    seasonEntries.push({ title: seasonTitle, path: seasonPath.replace('vostfr', 'vf') });
-                } else if (seasonPath.includes('/vf')) {
-                    seasonEntries.push({ title: seasonTitle, path: seasonPath.replace('/vf', '/vostfr') });
+        // Inject opposite language if only one was found (e.g., site lists only VOSTFR but VF exists at same path)
+        for (const sInfo of Object.values(seasonGroup)) {
+            if (sInfo.vostfrPath && !sInfo.vfPath) {
+                sInfo.vfPath = sInfo.vostfrPath.replace('vostfr', 'vf');
+            }
+            if (sInfo.vfPath && !sInfo.vostfrPath) {
+                sInfo.vostfrPath = sInfo.vfPath.includes('/vf')
+                    ? sInfo.vfPath.replace('/vf', '/vostfr')
+                    : sInfo.vfPath.replace('vf', 'vostfr');
+            }
+        }
+
+        const seasonList = Object.values(seasonGroup);
+        if (seasonList.length === 0) {
+            return cb({ success: false, message: "Aucun épisode animé trouvé. Il s'agit peut-être d'un scan..." });
+        }
+
+        // ── Build fetch requests for all VF and VOSTFR paths ──
+        // Each path variant (VF, VOSTFR) may have its own episodes.js
+        const fetchRequests = [];
+        const fetchIndex = []; // maps each request to { seasonIdx, dubStatus }
+        for (let sIdx = 0; sIdx < seasonList.length; sIdx++) {
+            const sInfo = seasonList[sIdx];
+            // Always try VOSTFR first, then VF
+            if (sInfo.vostfrPath) {
+                let jsUrl = rootUrl + sInfo.vostfrPath;
+                if (!jsUrl.endsWith('/')) jsUrl += '/';
+                fetchRequests.push({ url: jsUrl + 'episodes.js' });
+                fetchIndex.push({ seasonIdx: sIdx, dubStatus: 'sub' });
+            }
+            if (sInfo.vfPath) {
+                let jsUrl = rootUrl + sInfo.vfPath;
+                if (!jsUrl.endsWith('/')) jsUrl += '/';
+                fetchRequests.push({ url: jsUrl + 'episodes.js' });
+                fetchIndex.push({ seasonIdx: sIdx, dubStatus: 'dub' });
+            }
+        }
+
+        // Fetch all episode JS files in parallel
+        let fetchResponses = [];
+        if (typeof http_parallel !== 'undefined' && fetchRequests.length > 1) {
+            fetchResponses = await http_parallel(fetchRequests);
+        } else {
+            for (const req of fetchRequests) {
+                try {
+                    const r = await axios.get(req.url);
+                    fetchResponses.push({ body: typeof r.data === 'string' ? r.data : JSON.stringify(r.data) });
+                } catch (e) {
+                    fetchResponses.push({ body: '' });
                 }
             }
         }
 
-        // Deduplicate to avoid fetching same URL twice if Anime-Sama explicitly listed both panels in HTML somehow
-        const uniquePaths = new Set();
-        const deduplicatedEntries = [];
-        for (const entry of seasonEntries) {
-            if (!uniquePaths.has(entry.path)) {
-                uniquePaths.add(entry.path);
-                deduplicatedEntries.push(entry);
-            }
-        }
-
-        if (seasonEntries.length === 0) {
-            return cb({ success: false, message: "Aucun épisode animé trouvé. Il s'agit peut-être d'un scan..." });
-        }
-
+        // ── Parse episodes for each VF/VOSTFR variant ──
         const eps = [];
-        let baseSeasonNumber = 1;
-        const titleToSeasonNumber = {};
+        const seenEpSets = new Set(); // dedup by first episode URL per season variant
 
-        // Fetch episodes for all seasons found
-        const seasonRequests = deduplicatedEntries.map(sEntry => {
-            let jsUrl = rootUrl + sEntry.path;
-            if (!jsUrl.endsWith('/')) jsUrl += '/';
-            return { url: jsUrl + 'episodes.js' };
-        });
+        for (let fi = 0; fi < fetchIndex.length; fi++) {
+            const { seasonIdx, dubStatus } = fetchIndex[fi];
+            const sInfo = seasonList[seasonIdx];
+            const jsData = fetchResponses[fi]?.body || '';
+            if (!jsData) continue;
 
-        let responses = [];
-        if (typeof http_parallel !== 'undefined' && seasonRequests.length > 1) {
-            responses = await http_parallel(seasonRequests);
-        } else {
-            for (const req of seasonRequests) {
-                const r = await axios.get(req.url);
-                responses.push({ body: typeof r.data === 'string' ? r.data : JSON.stringify(r.data) });
-            }
-        }
-
-        for (let sIdx = 0; sIdx < deduplicatedEntries.length; sIdx++) {
-            const sEntry = deduplicatedEntries[sIdx];
-            const jsData = responses[sIdx]?.body || "";
-
-            let currentSeasonNumber = titleToSeasonNumber[sEntry.title];
-            if (!currentSeasonNumber) {
-                currentSeasonNumber = baseSeasonNumber++;
-                titleToSeasonNumber[sEntry.title] = currentSeasonNumber;
-            }
+            // Determine season number and content type from parsed season info
+            const seasonNum = sInfo.parsedInfo.season || (seasonIdx + 1);
+            const contentType = sInfo.parsedInfo.contentType;
 
             try {
                 const epsRegex = /var\s+eps\d+\s*=\s*\[([\s\S]*?)\]/gi;
@@ -741,8 +877,14 @@ async function load(url, cb) {
                             }
                         }
 
+                        // Dedup: if we've already added this episode for another language variant, skip
+                        const dedupKey = seasonNum + '-' + (i + 1) + '-' + dubStatus;
+                        if (seenEpSets.has(dedupKey)) continue;
+                        seenEpSets.add(dedupKey);
+
+                        // Build episode name based on season content type
                         let epName = "";
-                        const sTitle = sEntry.title.trim();
+                        const sTitle = sInfo.title.trim();
                         const isFilmOrOav = /film|films|oav|special|spécial/i.test(sTitle);
 
                         if (/^saison \d+$/i.test(sTitle)) {
@@ -768,8 +910,9 @@ async function load(url, cb) {
                             episode: i + 1,
                             posterUrl: posterUrl,
                             url: JSON.stringify(episodeStreams),
-                            season: currentSeasonNumber,
-                            dubStatus: sEntry.path.includes('/vf') || sEntry.path.endsWith('vf') ? 'dub' : 'sub'
+                            season: seasonNum,
+                            contentType: contentType,
+                            dubStatus: dubStatus
                         }));
                     }
                 }

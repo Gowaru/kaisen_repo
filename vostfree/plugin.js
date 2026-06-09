@@ -211,6 +211,47 @@ const Extractors = {
             return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Embed4Me', headers: { 'Referer': baseUrl } });
         }
 
+        // --- Uqload ---
+        if (url.includes('uqload')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                if (typeof res.data === 'string') {
+                    const match = res.data.match(/sources:\s*\["([^"]+)"\]/i) ||
+                        res.data.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                        res.data.match(/file:"([^"]+)"/i) ||
+                        res.data.match(/<source\s+src=["']([^"']+)["']/i);
+                    if (match) {
+                        let videoUrl = match[1];
+                        if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                        return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl), quality: 'Auto', source: 'Uqload', headers: { 'Referer': url } });
+                    }
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Uqload', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- Verystream ---
+        if (url.includes('verystream')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                if (typeof res.data === 'string') {
+                    const match = res.data.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                        res.data.match(/src\s*:\s*["']([^"']+)["']/i) ||
+                        res.data.match(/<source\s+src=["']([^"']+)["']/i) ||
+                        res.data.match(/<video[^>]+src=["']([^"']+)["']/i) ||
+                        res.data.match(/href=["']([^"']+\/get\/[^"']+)["'][^>]*>Direct/i) ||
+                        res.data.match(/"url":\s*"([^"]+)"/i);
+                    if (match) {
+                        let videoUrl = match[1];
+                        videoUrl = videoUrl.replace(/&amp;/g, '&');
+                        if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                        return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl), quality: 'Auto', source: 'Verystream', headers: { 'Referer': url } });
+                    }
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Verystream', headers: { 'Referer': baseUrl } });
+        }
+
         // --- Direct video URLs ---
         if (url.match(/\.(mp4|m3u8|mkv|webm)(\?|$)/i)) {
             return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Direct', headers: { 'Referer': baseUrl } });
@@ -237,7 +278,7 @@ async function getHome(cb) {
             const imgEl = el.querySelector('img');
             const title = imgEl?.getAttribute('alt') || linkEl?.getAttribute('title') || linkEl?.textContent.trim();
             const url = linkEl?.getAttribute('href');
-            const posterUrl = imgEl?.getAttribute('src');
+            const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
             if (title && url && !seenUrls.has(url)) {
                 seenUrls.add(url);
                 featured.push(new MultimediaItem({
@@ -257,7 +298,7 @@ async function getHome(cb) {
             const titleEl = el.querySelector('.alt, .title, .slider-title');
             const title = titleEl?.textContent.trim() || imgEl?.getAttribute('alt') || linkEl?.getAttribute('title');
             const url = linkEl?.getAttribute('href');
-            const posterUrl = imgEl?.getAttribute('src');
+            const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
             if (title && url && !seenUrls.has(url)) {
                 seenUrls.add(url);
                 newSeries.push(new MultimediaItem({
@@ -275,7 +316,7 @@ async function getHome(cb) {
             const imgEl = el.querySelector('img');
             const title = el.querySelector('.title, .info a')?.textContent.trim() || imgEl?.getAttribute('alt') || linkEl?.getAttribute('title');
             const url = linkEl?.getAttribute('href');
-            const posterUrl = imgEl?.getAttribute('src');
+            const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
             if (title && url && !seenUrls.has(url)) {
                 seenUrls.add(url);
                 topItems.push(new MultimediaItem({
@@ -294,7 +335,7 @@ async function getHome(cb) {
             const imgEl = el.querySelector ? el.querySelector('img') : null;
             const title = imgEl?.getAttribute('alt') || linkEl?.getAttribute('title') || linkEl?.textContent.trim();
             const url = linkEl?.getAttribute('href');
-            const posterUrl = imgEl?.getAttribute('src');
+            const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
             if (title && url && title.length > 1 && !seenUrls.has(url)) {
                 seenUrls.add(url);
                 smallItems.push(new MultimediaItem({
@@ -316,10 +357,9 @@ async function getHome(cb) {
             Array.from(container.querySelectorAll('a[href]')).forEach(el => {
                 const title = el.textContent.trim();
                 const url = el.getAttribute('href');
-                const imgEl = el.querySelector('img');
-                const posterUrl = imgEl?.getAttribute('src');
-                if (title && url && title.length > 2 && !url.includes('#') && !seenUrls.has(url)) {
-                    seenUrls.add(url);
+                const imgEl = el.querySelector('img');            const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
+            if (title && url && title.length > 2 && !url.includes('#') && !seenUrls.has(url)) {
+                seenUrls.add(url);
                     sectionItems.push(new MultimediaItem({
                         title, url: url.startsWith('http') ? url : baseUrl + url,
                         posterUrl: fixUrl(posterUrl), type: 'anime'
@@ -362,14 +402,14 @@ async function search(query, cb) {
                 const imgEl = el.querySelector ? el.querySelector('img') : null;
                 const title = imgEl?.getAttribute('alt') || linkEl?.getAttribute('title') || el.querySelector('h3, h2')?.textContent.trim() || linkEl?.textContent.trim();
                 const url = linkEl?.getAttribute('href');
-                const posterUrl = imgEl?.getAttribute('src');
+                const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
                 if (title && url && title.length > 1) {
                     const exists = items.find(i => i.title === title);
                     if (!exists) {
                         items.push(new MultimediaItem({
                             title,
                             url: url.startsWith('http') ? url : baseUrl + url,
-                            posterUrl: posterUrl,
+                            posterUrl: fixUrl(posterUrl),
                             type: 'anime', playbackPolicy: 'none'
                         }));
                     }
@@ -418,9 +458,12 @@ async function load(url, cb) {
             doc.querySelector('.full-story')?.textContent.trim() ||
             doc.querySelector('meta[name="description"]')?.getAttribute('content') ||
             doc.querySelector('meta[property="og:description"]')?.getAttribute('content');
-        // Poster: try .slide-poster img, then .movie-poster img, then og:image
-        const rawPoster = doc.querySelector('.slide-poster img')?.getAttribute('src') ||
+        // Poster: try .slide-poster img, then .movie-poster img, then og:image (with data-src for lazy-loaded)
+        const rawPoster = doc.querySelector('.slide-poster img')?.getAttribute('data-src') ||
+            doc.querySelector('.slide-poster img')?.getAttribute('src') ||
+            doc.querySelector('.movie-poster img')?.getAttribute('data-src') ||
             doc.querySelector('.movie-poster img')?.getAttribute('src') ||
+            doc.querySelector('.slide-info img')?.getAttribute('data-src') ||
             doc.querySelector('.slide-info img')?.getAttribute('src') ||
             doc.querySelector('meta[property="og:image"]')?.getAttribute('content');
         const posterUrl = fixUrl(rawPoster);
@@ -519,7 +562,7 @@ async function load(url, cb) {
             const imgEl = el.querySelector('span.image img, img');
             const recTitle = linkEl?.getAttribute('title') || linkEl?.textContent.trim();
             const recUrl = linkEl?.getAttribute('href');
-            const recPoster = imgEl?.getAttribute('src');
+            const recPoster = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
             if (recTitle && recUrl) {
                 recommendations.push(new MultimediaItem({
                     title: recTitle,
