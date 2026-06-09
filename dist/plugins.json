@@ -24,12 +24,12 @@
         "url": "https://anime-sama.si"
       }
     ],
-    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.animesama.sky"
+    "url": "https://raw.githubusercontent.com/test/main/dist/com.gowaru.kaisen.animesama.sky"
   },
   {
     "packageName": "com.gowaru.kaisen.animesultra",
     "name": "AnimesUltra",
-    "version": 5,
+    "version": 6,
     "baseUrl": "https://ww.animesultra.org",
     "domains": [
       {
@@ -51,12 +51,12 @@
     "categories": [
       "Anime"
     ],
-    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.animesultra.sky"
+    "url": "https://raw.githubusercontent.com/test/main/dist/com.gowaru.kaisen.animesultra.sky"
   },
   {
     "packageName": "com.gowaru.kaisen.animevostfr",
     "name": "AnimeVOSTFR",
-    "version": 3,
+    "version": 5,
     "baseUrl": "https://animevostfr.org/",
     "description": "AnimeVOSTFR - Streaming anime VOSTFR",
     "authors": [
@@ -68,12 +68,12 @@
     "categories": [
       "Anime"
     ],
-    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.animevostfr.sky"
+    "url": "https://raw.githubusercontent.com/test/main/dist/com.gowaru.kaisen.animevostfr.sky"
   },
   {
     "packageName": "com.gowaru.kaisen.frenchanime",
     "name": "French-Anime",
-    "version": 4,
+    "version": 6,
     "baseUrl": "https://french-anime.com",
     "domains": [
       {
@@ -95,7 +95,7 @@
     "categories": [
       "Anime"
     ],
-    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.frenchanime.sky"
+    "url": "https://raw.githubusercontent.com/test/main/dist/com.gowaru.kaisen.frenchanime.sky"
   },
   {
     "packageName": "com.gowaru.kaisen.sekai",
@@ -112,12 +112,12 @@
     "categories": [
       "Anime"
     ],
-    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.sekai.sky"
+    "url": "https://raw.githubusercontent.com/test/main/dist/com.gowaru.kaisen.sekai.sky"
   },
   {
     "packageName": "com.gowaru.kaisen.voiranime",
     "name": "VoirAnime",
-    "version": 3,
+    "version": 4,
     "baseUrl": "https://voir-anime.to",
     "description": "VoirAnime - Streaming anime VF & VOSTFR",
     "authors": [
@@ -129,7 +129,7 @@
     "categories": [
       "Anime"
     ],
-    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.voiranime.sky"
+    "url": "https://raw.githubusercontent.com/test/main/dist/com.gowaru.kaisen.voiranime.sky"
   },
   {
     "packageName": "com.gowaru.kaisen.vostfree",
@@ -146,6 +146,6 @@
     "categories": [
       "Anime"
     ],
-    "url": "https://raw.githubusercontent.com/Gowaru/kaisen_repo/main/dist/com.gowaru.kaisen.vostfree.sky"
+    "url": "https://raw.githubusercontent.com/test/main/dist/com.gowaru.kaisen.vostfree.sky"
   }
 ]

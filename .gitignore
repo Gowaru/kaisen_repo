@@ -35,6 +35,7 @@ jspm_packages/
 
 # Optional npm cache directory
 .npm
+.build/
 
 # Optional REPL history
 .node_repl_history
@@ -71,6 +72,9 @@ logs
 # Cache files
 .cache/
 *.cache
+
+# Build artifacts
+*.build
 
 # Temporary files
 tmp/
