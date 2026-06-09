@@ -1,5 +1,0 @@
-feat: améliorations posters, buildEpisodeName, et version bumps
-
-- frenchanime/plugin.js : extraction posters +18 sélecteurs, métadonnées (year, genres, status, score) with DOM+regex fallbacks, data-lazy-src dans search/getHome
-- animesultra/plugin.js : buildEpisodeName() avec saison + contentType + (VF)/(VOSTFR) dans les noms d'épisodes; fallback Film utilise buildEpisodeName()
-- plugin.json : version bumps (animesultra 6→7, animevostfr 5→6, frenchanime 6→7)
