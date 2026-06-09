@@ -626,7 +626,7 @@ async function search(query, cb) {
         // ── Helper: extract item from a Toroplay4 result element ──
         function extractSearchItem(el) {
             // Get URL from the first anchor that looks like an anime link
-            const linkEl = el.tagName === 'A' ? el : (el.querySelector('.TPMvCn a, .Title a, h2 a, h3 a, a[href*="/animes/"], a[href*="/saison/"], a[href*="/film/"]) || el.querySelector('a'));
+            const linkEl = el.tagName === 'A' ? el : (el.querySelector('.TPMvCn a, .Title a, h2 a, h3 a, a[href*="/animes/"], a[href*="/saison/"], a[href*="/film/"]) || el.querySelector("a")'));
             // Title comes from .TPMvCn .anmt, .Title, h2, h3, or the link itself
             const titleEl = el.querySelector('.TPMvCn .anmt, .Title, h2, h3, .episode-link') || linkEl;
             let title = titleEl?.getAttribute('title') || titleEl?.textContent?.trim() || linkEl?.textContent?.trim();
