@@ -946,7 +946,7 @@ async function load(url, cb) {
                 // data-episode-id or data-number attribute (common in streaming sites)
                 /<a [^>]*(?:data-episode-id|data-number|data-ep)[=]["'][^"']*["'][^>]*href=["'][^"']+["'][^>]*>/gi,
                 // Simple anchor with href inside an episode container (generic fallback)
-                /<a [^>]*href=["'][^"']*(?:episode|ep-|/ep/|watch)[^"']*["'][^>]*>/gi,
+                /<a [^>]*href=["'][^"']*(?:episode|ep-|\/ep\/|watch)[^"']*["'][^>]*>/gi,
             ];
             for (const pattern of epPatterns) {
                 if (anchors.length > 0) break;
