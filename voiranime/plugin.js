@@ -251,6 +251,224 @@ const Extractors = {
             return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Embed4Me', headers: { 'Referer': baseUrl } });
         }
 
+        // --- YourUpload / VidGuard ---
+        if (url.includes('yourupload') || url.includes('vidguard') || url.includes('vgfplay')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                }
+                const fm = html.match(/file\s*:\s*"([^"]+)"/i) ||
+                    html.match(/sources\s*:\s*\[\{[^}]*file\s*:\s*"([^"]+)"/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i);
+                if (fm) {
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(fm[1]), quality: 'Auto', source: 'YourUpload', headers: { 'Referer': url } });
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'YourUpload', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- Streamruby / StreamSB ---
+        if (url.includes('streamruby') || url.includes('streamsb') || url.includes('sbplay')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl, 'Accept': 'application/json,text/html,*/*' } });
+                let html = typeof res.data === 'string' ? res.data : (typeof res.data?.stream_url === 'string' ? res.data.stream_url : '');
+                // Try direct API response first
+                if (res.data?.stream_url) {
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(res.data.stream_url), quality: 'Auto', source: 'StreamSB', headers: { 'Referer': url } });
+                }
+                if (html) {
+                    if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                        try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                    }
+                    const fm = html.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                        html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                        html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                        html.match(/<source\s+src=["']([^"']+)["']/i);
+                    if (fm) {
+                        let vUrl = fm[1];
+                        if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                        return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(vUrl), quality: 'Auto', source: 'StreamSB', headers: { 'Referer': url } });
+                    }
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'StreamSB', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- Mp4Upload ---
+        if (url.includes('mp4upload') || url.includes('mp4u')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                const html = typeof res.data === 'string' ? res.data : '';
+                const fm = html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(vUrl), quality: 'Auto', source: 'Mp4Upload', headers: { 'Referer': url } });
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Mp4Upload', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- Gofile / GoFile.io ---
+        if (url.includes('gofile') || url.includes('gofile.io')) {
+            try {
+                const apiMatch = url.match(/gofile\.io\/d\/([^\/?]+)/i);
+                if (apiMatch) {
+                    const contentId = apiMatch[1];
+                    const apiRes = await axios.get(`https://api.gofile.io/v2/files/${contentId}`, {
+                        headers: { 'Authorization': 'Bearer', 'Accept': 'application/json' }
+                    });
+                    if (apiRes.data?.data?.children) {
+                        const children = apiRes.data.data.children;
+                        for (const childId in children) {
+                            const child = children[childId];
+                            if (child.link && child.mimetype?.startsWith('video')) {
+                                return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(child.link), quality: 'Auto', source: 'GoFile', headers: { 'Referer': url } });
+                            }
+                        }
+                    }
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'GoFile', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- Speedostream / SpeedoCDN ---
+        if (url.includes('speedostream') || url.includes('speedocdn')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                }
+                const fm = html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(vUrl), quality: 'Auto', source: 'SpeedoStream', headers: { 'Referer': url } });
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'SpeedoStream', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- Vembed.net ---
+        if (url.includes('vembed') || url.includes('vembed.net')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                const html = typeof res.data === 'string' ? res.data : '';
+                const fm = html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i) ||
+                    html.match(/<iframe[^>]*src=["']([^"']+)["'][^>]*>/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(vUrl), quality: 'Auto', source: 'Vembed', headers: { 'Referer': url } });
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Vembed', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- StreamWish ---
+        if (url.includes('streamwish') || url.includes('strwish') || url.includes('swish')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0' } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                }
+                const fm = html.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                    html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i) ||
+                    html.match(/(https?:\/\/[^"'\s]+\.(?:m3u8|mp4)[^"'\s]*)/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(vUrl), quality: 'Auto', source: 'StreamWish', headers: { 'Referer': url } });
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'StreamWish', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- VidSrc (embedding API) ---
+        if (url.includes('vidsrc') || url.includes('vidsrc.to') || url.includes('vidsrc.me') || url.includes('vidsrc.cc')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                }
+                // Try direct patterns first
+                const fm = html.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                    html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i) ||
+                    html.match(/(https?:\/\/[^"'\s]+\.(?:m3u8|mp4)[^"'\s]*)/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(vUrl), quality: 'Auto', source: 'VidSrc', headers: { 'Referer': url } });
+                }
+                // Fallback: try to extract iframe pointing to content
+                const iframe = html.match(/<iframe[^>]*src=["']([^"']+)["'][^>]*>/i);
+                if (iframe && iframe[1]) {
+                    const iframeUrl = iframe[1].startsWith('http') ? iframe[1] : baseUrl + (iframe[1].startsWith('/') ? '' : '/') + iframe[1];
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(iframeUrl), quality: 'Auto', source: 'VidSrc', headers: { 'Referer': url } });
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'VidSrc', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- SuperVideo ---
+        if (url.includes('supervideo') || url.includes('supervideo.cc') || url.includes('supervideo.tv')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                }
+                const fm = html.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                    html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i) ||
+                    html.match(/(https?:\/\/[^"'\s]+\.(?:m3u8|mp4)[^"'\s]*)/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(vUrl), quality: 'Auto', source: 'SuperVideo', headers: { 'Referer': url } });
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'SuperVideo', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- Stape (StreamWish network affiliate) ---
+        if (url.includes('stape') || url.includes('stape.me') || url.includes('systpe')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0' } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                }
+                const fm = html.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                    html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i) ||
+                    html.match(/(https?:\/\/[^"'\s]+\.(?:m3u8|mp4)[^"'\s]*)/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(vUrl), quality: 'Auto', source: 'Stape', headers: { 'Referer': url } });
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Stape', headers: { 'Referer': baseUrl } });
+        }
+
         // --- Direct video URLs ---
         if (url.match(/\.(mp4|m3u8|mkv|webm)(\?|$)/i)) {
             return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Direct', headers: { 'Referer': baseUrl } });
@@ -281,12 +499,12 @@ async function getHome(cb) {
             let url = titleEl?.getAttribute('href') || linkEl?.getAttribute('href');
             // Validate URL: skip non-anime links (ads, trackers, social, etc.)
             if (url && !url.match(/\/\d+-[\w-]+\.html/) && !url.includes('/anime/') && !url.includes('/anime-') && !url.includes('/manga/') && !url.includes('/series/')) url = undefined;
-            const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
+            const posterUrl = fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src'));
             if (title && url && !seenUrls.has(url)) {
                 seenUrls.add(url);
                 items.push(new MultimediaItem({
                     title, url: url.startsWith('http') ? url : baseUrl + url,
-                    posterUrl: fixUrl(posterUrl), type: 'anime'
+                    posterUrl: posterUrl, type: 'anime'
                 }));
             }
         });
@@ -311,14 +529,61 @@ async function getHome(cb) {
             const isVostfr = badgeText === 'VOSTFR' || /VOSTFR/.test(el.querySelector('.tabs-content')?.textContent || '');
             seenUrls.add(url);
             const fullUrl = url.startsWith('http') ? url : baseUrl + url;
-            const posterUrl = fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src'));
+            const posterUrl = fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src'));
             if (isVf) vfItems.push(new MultimediaItem({ title: title + ' (VF)', url: fullUrl, posterUrl, type: 'anime' }));
             else if (isVostfr) vostfrItems.push(new MultimediaItem({ title: title + ' (VOSTFR)', url: fullUrl, posterUrl, type: 'anime' }));
         });
         if (vfItems.length > 0) results['Animes VF'] = vfItems;
         if (vostfrItems.length > 0) results['Animes VOSTFR'] = vostfrItems;
 
+        // ── 3. Madara block areas (c-blog__heading + .row, section.block_area) ──
+        const blockAreaSections = [];
+        Array.from(doc.querySelectorAll('.c-blog__heading, section.block_area .block_area-header, .block_area .cat-heading')).forEach(heading => {
+            const sectionTitle = heading.textContent.trim();
+            if (!sectionTitle || sectionTitle.length < 2 || results[sectionTitle]) return;
+            let container = heading.nextElementSibling;
+            if (!container) container = heading.closest('.block_area, section, .c-blog') || heading.parentElement;
+            if (!container) return;
+            const blockItems = [];
+            Array.from(container.querySelectorAll('.page-item-detail, .c-tabs-item__content, .row .page-item-detail, .swiper-slide')).forEach(el => {
+                if (blockItems.length >= 20) return;
+                const linkEl = el.querySelector('a[href]');
+                const titleEl = el.querySelector('.post-title a, h3 a, h4 a, h5 a, .title a');
+                const imgEl = el.querySelector('img');
+                const title = titleEl?.textContent.trim() || linkEl?.getAttribute('title') || imgEl?.getAttribute('alt');
+                let url = titleEl?.getAttribute('href') || linkEl?.getAttribute('href');
+                if (url && !url.match(/\/\d+-[\w-]+\.html/) && !url.includes('/anime/') && !url.includes('/anime-') && !url.includes('/manga/') && !url.includes('/series/')) url = undefined;
+                const posterUrl = fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src'));
+                if (title && url && title.length > 2 && !seenUrls.has(url)) {
+                    seenUrls.add(url);
+                    blockItems.push(new MultimediaItem({
+                        title, url: url.startsWith('http') ? url : baseUrl + url,
+                        posterUrl, type: 'anime'
+                    }));
+                }
+            });
+            if (blockItems.length > 0) results[sectionTitle] = blockItems;
+        });
 
+        // ── 4. Fallback: Derniers Ajouts from generic anime links ──
+        if (Object.keys(results).length < 3) {
+            const fallbackItems = [];
+            Array.from(doc.querySelectorAll('a[href*="/manga/"], a[href*="/series/"], a[href*="/anime/"], a[href*="/anime-"], a[href*="-manga-"]')).forEach(el => {
+                if (fallbackItems.length >= 25) return;
+                const title = el.textContent.trim();
+                const url = el.getAttribute('href');
+                if (title && url && title.length > 2 && !seenUrls.has(url)) {
+                    const imgEl = el.querySelector('img') || el.parentElement?.querySelector('img') || el.closest('.page-item-detail, .c-tabs-item__content, .post-title, article, .block_area')?.querySelector('img');
+                    const posterUrl = fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src'));
+                    seenUrls.add(url);
+                    fallbackItems.push(new MultimediaItem({
+                        title, url: url.startsWith('http') ? url : baseUrl + url,
+                        posterUrl, type: 'anime'
+                    }));
+                }
+            });
+            if (fallbackItems.length > 0) results['Derniers Ajouts'] = fallbackItems;
+        }
 
         // ── 5. Content sections by headings ──
         Array.from(doc.querySelectorAll('h2, h3, h4')).forEach(heading => {
@@ -328,16 +593,20 @@ async function getHome(cb) {
             if (!container) container = heading.parentElement;
             if (!container) return;
             const sectionItems = [];
-            Array.from(container.querySelectorAll('.post-title a, h3 a, a[href*="/manga/"], a[href*="/anime/"]')).forEach(el => {
-                const title = el.textContent.trim();
-                let url = el.getAttribute('href');
-                // Validate URL: skip non-anime links (el IS the link, so URL and title are already from same element)
+            Array.from(container.querySelectorAll('.post-title a, h3 a, a[href*="/manga/"], a[href*="/anime/"], .page-item-detail, .c-tabs-item__content')).forEach(el => {
+                // If el is a container, extract from inside; if it's a link, use directly
+                const linkEl = el.tagName === 'A' ? el : el.querySelector('a[href]');
+                const title = linkEl?.textContent.trim() || el.querySelector('img')?.getAttribute('alt');
+                let url = linkEl?.getAttribute('href');
+                // Validate URL: skip non-anime links
                 if (url && !url.match(/\/\d+-[\w-]+\.html/) && !url.includes('/anime/') && !url.includes('/anime-') && !url.includes('/manga/') && !url.includes('/series/')) url = undefined;
+                const imgEl = el.querySelector('img');
+                const posterUrl = fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src'));
                 if (title && url && title.length > 2 && !seenUrls.has(url)) {
                     seenUrls.add(url);
                     sectionItems.push(new MultimediaItem({
                         title, url: url.startsWith('http') ? url : baseUrl + url,
-                        posterUrl: '', type: 'anime'
+                        posterUrl: posterUrl, type: 'anime'
                     }));
                 }
             });
@@ -350,48 +619,145 @@ async function getHome(cb) {
 
 async function search(query, cb) {
     try {
-        // Madara theme uses ajax search
-        const res = await axios.get(`${baseUrl}/?s=${encodeURIComponent(query)}&post_type=wp-manga`, { headers });
-        const doc = await parseHtml(res.data);
         const items = [];
         const seenUrls = new Set();
-        // Madara theme selectors with fallbacks
-        const selectors = ['.c-tabs-item__content', '.row.c-tabs-item__content', '.post-title', '.page-item-detail'];
-        for (const sel of selectors) {
-            Array.from(doc.querySelectorAll(sel)).forEach(el => {
-                const linkEl = el.querySelector('a');
-                const title = el.querySelector('.post-title a, h4 a, h3 a')?.textContent.trim();
-                const url = linkEl?.getAttribute('href');
-                const posterUrl = el.querySelector('img')?.getAttribute('data-src') || el.querySelector('img')?.getAttribute('src');
-                if (title && url && !seenUrls.has(url)) {
-                    seenUrls.add(url);
-                    items.push(new MultimediaItem({
-                        title,
-                        url: url.startsWith('http') ? url : baseUrl + url,
-                        posterUrl: (function(p){ if(!p) return ''; if(p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl),
-                        type: 'anime', playbackPolicy: 'none'
-                    }));
+
+        // ── Helper: parse items from HTML DOM ──
+        async function parseSearchHtml(html) {
+            if (!html || typeof html !== 'string' || html.length < 200) return [];
+            const results = [];
+            try {
+                const dom = await parseHtml(html);
+                // Try Madara-specific selectors first
+                const searchSelectors = [
+                    '.c-tabs-item__content',
+                    '.row.c-tabs-item__content',
+                    '.post-title',
+                    '.page-item-detail',
+                    '.c-tabs-item',
+                    '.tab-content .tab-pane',
+                    'article',
+                    '.search-item'
+                ];
+                for (const sel of searchSelectors) {
+                    if (results.length >= 25) break;
+                    Array.from(dom.querySelectorAll(sel)).forEach(el => {
+                        if (results.length >= 25) return;
+                        const linkEl = el.querySelector('a[href]');
+                        const titleEl = el.querySelector('.post-title a, h4 a, h3 a, h5 a, .entry-title a');
+                        const imgEl = el.querySelector('img');
+                        const title = titleEl?.textContent.trim() || linkEl?.getAttribute('title') || imgEl?.getAttribute('alt');
+                        let url = titleEl?.getAttribute('href') || linkEl?.getAttribute('href');
+                        // Validate URL: skip non-anime links
+                        if (url && !url.match(/\/\d+-[\w-]+\.html/) && !url.includes('/anime/') && !url.includes('/anime-') && !url.includes('/manga/') && !url.includes('/series/')) url = undefined;
+                        if (!title || !url || seenUrls.has(url)) return;
+                        seenUrls.add(url);
+                        const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src');
+                        results.push({ title, url: url.startsWith('http') ? url : baseUrl + url, posterUrl: fixUrl(posterUrl) });
+                    });
+                    if (results.length > 0) break;
                 }
-            });
-            if (items.length > 0) break;
+                // Fallback: generic link patterns in DOM
+                if (results.length === 0) {
+                    Array.from(dom.querySelectorAll('a[href*="/manga/"], a[href*="/series/"], a[href*="/anime/"], a[href*="/manga-"]')).forEach(el => {
+                        if (results.length >= 25) return;
+                        const title = el.textContent.trim();
+                        const url = el.getAttribute('href');
+                        if (title && url && title.length > 2 && !seenUrls.has(url)) {
+                            const imgEl = el.querySelector('img') || el.parentElement?.querySelector('img') || el.closest('.page-item-detail, .c-tabs-item__content, .post-title, article')?.querySelector('img');
+                            const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src');
+                            seenUrls.add(url);
+                            results.push({ title, url: url.startsWith('http') ? url : baseUrl + url, posterUrl: fixUrl(posterUrl) });
+                        }
+                    });
+                }
+            } catch (e) { }
+            return results;
         }
-        // Fallback: generic link patterns
+
+        // ── Strategy 1: Primary Madara GET search ──
         if (items.length === 0) {
-            Array.from(doc.querySelectorAll('a[href*="/manga/"], a[href*="/series/"], a[href*="/anime/"]')).forEach(el => {
-                const title = el.textContent.trim();
-                const url = el.getAttribute('href');
-                if (title && url && title.length > 2 && !seenUrls.has(url)) {
-                    seenUrls.add(url);
-                    items.push(new MultimediaItem({
-                        title,
-                        url: url.startsWith('http') ? url : baseUrl + url,
-                        posterUrl: '',
-                        type: 'anime', playbackPolicy: 'none'
-                    }));
+            try {
+                const res = await axios.get(`${baseUrl}/?s=${encodeURIComponent(query)}&post_type=wp-manga`, { headers });
+                if (res.data && typeof res.data === 'string' && res.data.length > 500) {
+                    const parsed = await parseSearchHtml(res.data);
+                    for (const p of parsed) items.push(p);
                 }
-            });
+            } catch (e) { }
         }
-        cb({ success: true, data: items });
+
+        // ── Strategy 2: GET without post_type (generic WordPress) ──
+        if (items.length === 0) {
+            try {
+                const res = await axios.get(`${baseUrl}/?s=${encodeURIComponent(query)}`, { headers });
+                if (res.data && typeof res.data === 'string' && res.data.length > 500) {
+                    const parsed = await parseSearchHtml(res.data);
+                    for (const p of parsed) items.push(p);
+                }
+            } catch (e) { }
+        }
+
+        // ── Strategy 3: POST to admin-ajax.php (Madara AJAX search) ──
+        if (items.length === 0) {
+            try {
+                const res = await axios.post(`${baseUrl}/wp-admin/admin-ajax.php`, 
+                    `action=wp-manga-search&s=${encodeURIComponent(query)}`,
+                    { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' } }
+                );
+                const data = res.data;
+                if (data && typeof data === 'string' && data.length > 200) {
+                    const parsed = await parseSearchHtml(data);
+                    for (const p of parsed) items.push(p);
+                } else if (data?.success && data?.data) {
+                    // Handle JSON response from admin-ajax
+                    const jsonItems = data.data;
+                    if (Array.isArray(jsonItems)) {
+                        for (const item of jsonItems) {
+                            if (items.length >= 25) break;
+                            const title = item.title || '';
+                            const url = item.url || item.link || '';
+                            const posterUrl = item.thumbnail || item.image || item.poster || '';
+                            if (title && url && !seenUrls.has(url)) {
+                                seenUrls.add(url);
+                                items.push(new MultimediaItem({
+                                    title, url: url.startsWith('http') ? url : baseUrl + url,
+                                    posterUrl: fixUrl(posterUrl), type: 'anime', playbackPolicy: 'none'
+                                }));
+                            }
+                        }
+                    }
+                }
+            } catch (e) { }
+        }
+
+        // ── Strategy 4: GET with page and try all search endpoints ──
+        if (items.length === 0) {
+            const endpoints = [
+                `${baseUrl}/page-search.html?s=${encodeURIComponent(query)}`,
+                `${baseUrl}/search/${encodeURIComponent(query)}/`
+            ];
+            for (const endpoint of endpoints) {
+                if (items.length > 0) break;
+                try {
+                    const res = await axios.get(endpoint, { headers });
+                    if (res.data && typeof res.data === 'string' && res.data.length > 500) {
+                        const parsed = await parseSearchHtml(res.data);
+                        for (const p of parsed) items.push(p);
+                    }
+                } catch (e) { }
+            }
+        }
+
+        // Convert to MultimediaItem format
+        const results = items.map(i => new MultimediaItem({
+            title: i.title,
+            url: i.url,
+            posterUrl: i.posterUrl,
+            type: 'anime',
+            playbackPolicy: 'none'
+        }));
+
+        cb({ success: true, data: results });
     } catch (e) { log('search error', e); cb({ success: false, errorCode: 'SEARCH_ERROR', message: String(e) }); }
 }
 
@@ -427,53 +793,223 @@ function detectDubStatus(url, title) {
         return 'none';
     }
 
+// Extract episode number from title more reliably
+// Prioritizes patterns like "Episode 3", "Épisode 12", "E04" over generic first number
+function extractEpisodeNumber(title) {
+    if (!title) return undefined;
+    const specific = title.match(/(?:Episode|Épisode|Ep|E(?!p))\s*(\d+)/i);
+    if (specific) return parseInt(specific[1]);
+    const nums = title.match(/\d+/g);
+    if (nums && nums.length > 0) {
+        return parseInt(nums[nums.length - 1]);
+    }
+    return undefined;
+}
+
+// Determine dubStatus from the page URL (VF or VOSTFR)
+function getDubStatusFromPageUrl(pageUrl) {
+    if (/\/vf\b|[-_]vf(?!o)/i.test(pageUrl)) return 'dub';
+    if (/\/vostfr\b|[-_]vostfr/i.test(pageUrl)) return 'sub';
+    return undefined;
+}
+
+// Find alternative VF/VOSTFR version from the page HTML
+function findAlternativeVersionFromPage(html, currentUrl) {
+    const lowerUrl = currentUrl.toLowerCase();
+    let currentVersion = null;
+    if (/\/vostfr|[-_]vostfr|\bvostfr\b/i.test(lowerUrl)) currentVersion = 'VOSTFR';
+    else if (/\/vf|[-_]vf(?!o)|\bvf\b(?!o)/i.test(lowerUrl)) currentVersion = 'VF';
+    if (!currentVersion) return { currentVersion: null, alternativeUrl: null };
+
+    const altPath = currentVersion === 'VOSTFR' ? 'vf' : 'vostfr';
+    let alternativeUrl = null;
+
+    // Try Madara language switcher — look for <a> or <option> with the opposite language
+    const langPatterns = [
+        new RegExp('href=["\']([^"\']*' + altPath + '[^"\']*)["\'][^>]*class=["\'][^"\']*(?:flag|lang|switch|change|active)[^"\']*["\']', 'gi'),
+        new RegExp('href=["\']([^"\']*(?:ano|autre|other|lang|langue)\/' + altPath + '[^"\']*)["\']', 'gi'),
+        new RegExp('value=["\']([^"\']*' + altPath + '[^"\']*)["\']', 'gi'),
+    ];
+    for (const regex of langPatterns) {
+        if (alternativeUrl) break;
+        const m = regex.exec(html);
+        if (m && m[1] && !m[1].includes(lowerUrl)) {
+            alternativeUrl = m[1].startsWith('http') ? m[1] : baseUrl + (m[1].startsWith('/') ? '' : '/') + m[1];
+        }
+    }
+
+    // Fallback: construct from current URL by replacing vf↔vostfr
+    if (!alternativeUrl) {
+        if (currentVersion === 'VOSTFR') {
+            alternativeUrl = lowerUrl.replace(/vostfr/gi, 'vf');
+        } else {
+            alternativeUrl = lowerUrl.replace(/\/vf\b/gi, '/vostfr').replace(/-vf(?!o)/gi, '-vostfr');
+        }
+        if (alternativeUrl === currentUrl) alternativeUrl = null;
+    }
+    return { currentVersion, alternativeUrl };
+}
+
 async function load(url, cb) {
     try {
         const res = await axios.get(url, { headers });
         const html = res.data;
         const doc = await parseHtml(html);
-        const title = doc.querySelector('.post-title h1, h1.entry-title, h1')?.textContent.trim();
+        const title = doc.querySelector('.post-title h1, h1.entry-title, h1')?.textContent.trim() ||
+            doc.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
+            doc.querySelector('meta[name="twitter:title"]')?.getAttribute('content');
         // Description: try multiple selectors (Madara theme patterns)
         const description = doc.querySelector('.description-summary .summary__content')?.textContent.trim() ||
             doc.querySelector('.entry-content .summary__content')?.textContent.trim() ||
             doc.querySelector('.manga-excerpt')?.textContent.trim() ||
             doc.querySelector('.summary__content')?.textContent.trim() ||
+            doc.querySelector('.post-content_item .summary-content')?.textContent.trim() ||
+            doc.querySelector('.entry-content p')?.textContent.trim() ||
+            doc.querySelector('article p')?.textContent.trim() ||
+            doc.querySelector('.description p')?.textContent.trim() ||
+            doc.querySelector('.wp-manga .description')?.textContent.trim() ||
+            // Meta tags as last resort
             doc.querySelector('meta[name="description"]')?.getAttribute('content') ||
             doc.querySelector('meta[property="og:description"]')?.getAttribute('content');
-        // Poster: try multiple selectors with data-src first (lazy-loaded Madara theme)
-        const posterEl = doc.querySelector('.summary_image img') || doc.querySelector('.post-thumbnail img');
-        const posterUrl = posterEl?.getAttribute('data-src') || posterEl?.getAttribute('src') ||
-            doc.querySelector('meta[property="og:image"]')?.getAttribute('content');
+        // Poster: try multiple selectors with data-src first (lazy-loaded Madara theme)            const posterEl = doc.querySelector('.summary_image img') || doc.querySelector('.post-thumbnail img') ||
+            doc.querySelector('.poster img') || doc.querySelector('.wp-post-image') || doc.querySelector('.entry-content img');
+        const rawPoster = posterEl?.getAttribute('data-src') || posterEl?.getAttribute('src') || posterEl?.getAttribute('data-lazy-src') ||
+            doc.querySelector('meta[property="og:image"]')?.getAttribute('content') ||
+            doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content');
+        const posterUrl = fixUrl(rawPoster);
         // Extract metadata: year, genres, status
         const yearEl = doc.querySelector('.post-content_item .summary-content, .post-status .summary-content');
         const yearFromEl = yearEl ? parseInt(yearEl.textContent.match(/\d{4}/)?.[0] || '0') : undefined;
-        const yearMatch = html.match(/datePublished["']?\s*:?\s*["']?(\d{4})/i) || html.match(/Ann[eé]e\s*:?\s*(\d{4})/i);
-        const year = yearFromEl || (yearMatch ? parseInt(yearMatch[1]) : undefined);
-        const genreEls = Array.from(doc.querySelectorAll('.genres-content a, .wp-manga-genre a, .tag-summary a, .summary-content a[href*="genre"]')).map(el => el.textContent.trim()).filter(Boolean);
-        const statusEl = doc.querySelector('.post-status .summary-content, .post-status .genres-content');
-        const status = statusEl?.textContent?.trim()?.toLowerCase();
-        // Extract score from .score element
-        const scoreEl = doc.querySelector('.score.font-meta.total_votes');
-        const parsedScore = scoreEl ? parseFloat(scoreEl.textContent.trim()) : NaN;
-        const score = Number.isFinite(parsedScore) ? parsedScore : undefined;
+        const yearMatch = html.match(/datePublished["']?\s*:?\s*["']?(\d{4})/i) || 
+            html.match(/Ann[eé]e\s*:?\s*(\d{4})/i) ||
+            html.match(/\b(?:19|20)\d{2}\b/);
+        const year = yearFromEl || (yearMatch ? parseInt(yearMatch[1] || yearMatch[0]) : undefined);
+        // Filter out invalid years
+        const finalYear = (year && year >= 1900 && year <= 2030) ? year : undefined;
+        // Use validated year in all downstream code
+        const displayYear = finalYear;
+        const genreEls = Array.from(doc.querySelectorAll('.genres-content a, .wp-manga-genre a, .tag-summary a, .summary-content a[href*="genre"], .wp-manga-tags a, [itemprop="genre"], .manga-category a')).map(el => el.textContent.trim()).filter(Boolean);
+        // Status: try multiple selectors then regex fallback
+        let status = doc.querySelector('.post-status .summary-content, .post-status .genres-content, .status .summary-content')?.textContent?.trim()?.toLowerCase();
+        if (!status) {
+            const statusMatch = html.match(/Statut\s*:?\s*([^<]+)/i) || 
+                html.match(/Status\s*:?\s*([^<]+)/i) ||
+                html.match(/\b(En cours|Termin[ée]|Finished|Ongoing|Completed|Airing)\b/i);
+            if (statusMatch) status = statusMatch[1]?.trim().toLowerCase() || statusMatch[0].toLowerCase();
+        }
+        // Normalize status
+        if (status) {
+            if (/termin|complet|fini|ended|finished/i.test(status)) status = 'completed';
+            else if (/cours|airing|ongoing|en cours/i.test(status)) status = 'ongoing';
+        }
+        // Extract score from multiple Madara selectors
+        const scoreEl = doc.querySelector('.score.font-meta.total_votes, .post-total-rating .score, .rating-number, .total_votes, [itemprop="ratingValue"]');
+        const rawScore = scoreEl?.textContent ? parseFloat(scoreEl.textContent.replace(/[^\d.]/g, '')) || undefined : undefined;
+        // Regex fallback for score in HTML/JSON-LD
+        const scoreMatch = !rawScore ? html.match(/"ratingValue"\s*:\s*([\d.]+)/i) || html.match(/<meta[^>]*itemprop="ratingValue"[^>]*content="([\d.]+)"/i) : null;
+        const score = rawScore || (scoreMatch ? parseFloat(scoreMatch[1]) : undefined);
         const episodes = [];
+        const seenEpUrls = new Set();
+        const seenEpTriples = new Set();
+        // Detect page-level dubStatus from URL/title
+        const pageDubStatus = detectDubStatus(url, title);
+
         // Madara theme: .wp-manga-chapter or li.chapter-item
-        doc.querySelectorAll('.wp-manga-chapter a, li.version-chap a, .listing-chapters_wrap a, .chapter-list a').forEach((el, index) => {
-            const epUrl = el.getAttribute('href');
-            const epTitle = el.textContent.trim();
-            if (epUrl) {
-                const detected = detectSeasonAndType(epTitle);
-                episodes.push(new Episode({
-                    name: epTitle || ('Episode ' + (index + 1)),
-                    episode: index + 1,
-                    url: epUrl.startsWith('http') ? epUrl : baseUrl + epUrl,
-                    season: detected.season,
-                    posterUrl: posterUrl,
-                    contentType: detected.contentType,
-                    dubStatus: detectDubStatus(epUrl, epTitle)
-                }));
+        const epSelectors = [
+            '.wp-manga-chapter a',
+            'li.version-chap a',
+            '.listing-chapters_wrap a',
+            '.chapter-list a',
+            '.wp-manga-chapter li',
+            '.chapter-item'
+        ];
+        for (const sel of epSelectors) {
+            if (episodes.length > 0) break;
+            doc.querySelectorAll(sel).forEach(el => {
+                const linkEl = el.tagName === 'A' ? el : el.querySelector('a');
+                const epUrl = linkEl?.getAttribute('href');
+                const epTitle = linkEl?.textContent.trim() || el.querySelector('.chapter-name')?.textContent.trim() || el.textContent.trim();
+                if (epUrl) {
+                    const fullEpUrl = epUrl.startsWith('http') ? epUrl : baseUrl + epUrl;
+                    if (seenEpUrls.has(fullEpUrl)) return;
+                    seenEpUrls.add(fullEpUrl);
+                    // Extract episode number reliably
+                    let epNum = extractEpisodeNumber(epTitle);
+                    if (epNum === undefined) {
+                        epNum = episodes.length + 1; // sequential fallback
+                    }
+                    // Season and type from title detection
+                    const detected = detectSeasonAndType(epTitle);
+                    // Dub status from URL and title, fallback to page level
+                    let dubSt = detectDubStatus(epUrl, epTitle);
+                    if (dubSt === 'none') dubSt = pageDubStatus;
+                    // Dedup by (season, episode, dubStatus) to avoid duplicates across VF/VOSTFR sections
+                    const tripleKey = `${detected.season || 1}-${epNum}-${dubSt}`;
+                    if (seenEpTriples.has(tripleKey)) return;
+                    seenEpTriples.add(tripleKey);
+                    episodes.push(new Episode({
+                        name: epTitle || ('Episode ' + epNum),
+                        episode: epNum,
+                        url: fullEpUrl,
+                        season: detected.season || 1,
+                        posterUrl: posterUrl,
+                        contentType: detected.contentType,
+                        dubStatus: dubSt
+                    }));
+                }
+            });
+        }
+
+        // ── Alternative VF/VOSTFR version detection ──
+        const { currentVersion, alternativeUrl } = findAlternativeVersionFromPage(html, url);
+        if (alternativeUrl && episodes.length > 0) {
+            const altDubStatus = currentVersion === 'VF' ? 'sub' : 'dub';
+            try {
+                const altRes = await axios.get(alternativeUrl, { headers });
+                if (altRes.status === 200 && typeof altRes.data === 'string' && altRes.data.length > 500) {
+                    const altDoc = await parseHtml(altRes.data);
+                    // Parse alternative version's episodes using same selectors
+                    for (const sel of epSelectors) {
+                        if (episodes.length >= 100) break;
+                        altDoc.querySelectorAll(sel).forEach(el => {
+                            const linkEl = el.tagName === 'A' ? el : el.querySelector('a');
+                            const altEpUrl = linkEl?.getAttribute('href');
+                            const altEpTitle = linkEl?.textContent.trim() || el.querySelector('.chapter-name')?.textContent.trim() || el.textContent.trim();
+                            if (altEpUrl) {
+                                const fullAltEpUrl = altEpUrl.startsWith('http') ? altEpUrl : baseUrl + altEpUrl;
+                                if (seenEpUrls.has(fullAltEpUrl)) return;
+                                seenEpUrls.add(fullAltEpUrl);
+                                let altEpNum = extractEpisodeNumber(altEpTitle);
+                                if (altEpNum === undefined) altEpNum = episodes.length + 1;
+                                const altDetected = detectSeasonAndType(altEpTitle);
+                                const altTripleKey = `${altDetected.season || 1}-${altEpNum}-${altDubStatus}`;
+                                if (seenEpTriples.has(altTripleKey)) return;
+                                seenEpTriples.add(altTripleKey);
+                                episodes.push(new Episode({
+                                    name: altEpTitle || ('Episode ' + altEpNum),
+                                    episode: altEpNum,
+                                    url: fullAltEpUrl,
+                                    season: altDetected.season || 1,
+                                    posterUrl: posterUrl,
+                                    contentType: altDetected.contentType,
+                                    dubStatus: altDubStatus
+                                }));
+                            }
+                        });
+                    }
+                }
+            } catch (e) { /* Alternative version not available */ }
+        }
+
+        // ── Reverse episodes if in descending order (Madara lists newest first: 13→1) ──
+        if (episodes.length > 1) {
+            const firstEp = episodes[0].episode;
+            const lastEp = episodes[episodes.length - 1].episode;
+            if (firstEp > lastEp) {
+                episodes.reverse();
             }
-        });
+        }
+
         // Film fallback: no episodes → pass page URL to loadStreams for iframe extraction
         if (episodes.length === 0) {
             episodes.push(new Episode({
@@ -486,30 +1022,94 @@ async function load(url, cb) {
                 dubStatus: detectDubStatus(url, title)
             }));
         }
-        // Extract recommendations from Madara related/similar section
+
+        // ── Extract recommendations from Madara related/similar section ──
         const recommendations = [];
-        const recSelectors = ['.related .page-item-detail', '.c-blog__heading + .row .page-item-detail', '.manga-slider .slider__item', '.popular-slider .slider__item'];
+        const recSeenUrls = new Set();
+
+        // Strategy 1: Specific Madara selectors (primary)
+        const recSelectors = [
+            '.related .page-item-detail',
+            '.c-blog__heading + .row .page-item-detail',
+            '.manga-slider .slider__item',
+            '.popular-slider .slider__item',
+            '.related .c-tabs-item__content',
+            '[class*="related"] .page-item-detail',
+            '[class*="related"] .c-tabs-item__content',
+            '[class*="recommend"] .page-item-detail',
+            '[class*="similaire"] .page-item-detail',
+            '.widget .page-item-detail',
+            '.sidebar .page-item-detail',
+            '.post-title a',
+            '.c-tabs-item__content'
+        ];
         for (const sel of recSelectors) {
+            if (recommendations.length >= 20) break;
             doc.querySelectorAll(sel).forEach(el => {
+                if (recommendations.length >= 20) return;
                 const linkEl = el.querySelector('a[href]');
                 const imgEl = el.querySelector('img');
-                const titleEl = el.querySelector('.post-title a, h3 a, h5 a');
-                const recTitle = titleEl?.textContent.trim() || linkEl?.getAttribute('title');
+                const titleEl = el.querySelector('.post-title a, h3 a, h5 a, h4 a');
+                const recTitle = titleEl?.textContent.trim() || linkEl?.getAttribute('title') || imgEl?.getAttribute('alt') || linkEl?.textContent.trim();
                 const recUrl = linkEl?.getAttribute('href');
-                const recPoster = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
-                if (recTitle && recUrl && !recUrl.includes('#')) {
-                    recommendations.push(new MultimediaItem({
-                        title: recTitle,
-                        url: recUrl.startsWith('http') ? recUrl : baseUrl + recUrl,
-                        posterUrl: recPoster ? fixUrl(recPoster) : '',
-                        type: 'anime'
-                    }));
-                }
+                if (!recTitle || !recUrl || recUrl.includes('#') || recUrl.includes('javascript:')) return;
+                const fullRecUrl = recUrl.startsWith('http') ? recUrl : baseUrl + recUrl;
+                if (recSeenUrls.has(fullRecUrl) || fullRecUrl === url) return;
+                recSeenUrls.add(fullRecUrl);
+                const recPoster = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src');
+                recommendations.push(new MultimediaItem({
+                    title: recTitle,
+                    url: fullRecUrl,
+                    posterUrl: recPoster ? fixUrl(recPoster) : '',
+                    type: 'anime'
+                }));
             });
             if (recommendations.length > 0) break;
         }
 
-        cb({ success: true, data: new MultimediaItem({ type: "anime", title, description, posterUrl, episodes, year, score, status, genres: genreEls.length > 0 ? genreEls : undefined, recommendations: recommendations.length > 0 ? recommendations : undefined }) });
+        // ── Strategy 2: Heading-based recommendation sections ──
+        if (recommendations.length === 0) {
+            const headingKeywords = /recommand|recommend|similaire|related|suggestion|vous aimerez|autre|also like|popular/i;
+            doc.querySelectorAll('h2, h3, h4').forEach(heading => {
+                if (recommendations.length >= 10) return;
+                const headingText = heading.textContent.trim();
+                if (!headingKeywords.test(headingText)) return;
+                let container = heading.closest('.widget, section, div, .block') || heading.parentElement;
+                if (!container) return;
+                container.querySelectorAll('.page-item-detail, .c-tabs-item__content, .post-title, a[href*="/anime/"], a[href*="/manga/"]').forEach(el => {
+                    if (recommendations.length >= 10) return;
+                    const imgEl = el.querySelector('img');
+                    const titleEl = el.querySelector('.post-title a, h3 a, h4 a, h5 a') || el;
+                    const linkEl = el.tagName === 'A' ? el : el.querySelector('a[href]');
+                    const recTitle = titleEl?.textContent?.trim() || linkEl?.textContent?.trim() || imgEl?.getAttribute('alt');
+                    const recUrl = linkEl?.getAttribute('href');
+                    if (!recTitle || !recUrl || recUrl.includes('#')) return;
+                    const fullRecUrl = recUrl.startsWith('http') ? recUrl : baseUrl + recUrl;
+                    if (recSeenUrls.has(fullRecUrl) || fullRecUrl === url) return;
+                    recSeenUrls.add(fullRecUrl);
+                    const recPoster = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src');
+                    recommendations.push(new MultimediaItem({ title: recTitle, url: fullRecUrl, posterUrl: recPoster ? fixUrl(recPoster) : '', type: 'anime' }));
+                });
+            });
+        }
+
+        // ── Strategy 3: Genre-based recommendations using search ──
+        if (recommendations.length === 0 && genreEls && genreEls.length > 0 && title) {
+            try {
+                const searchRes = await new Promise(resolve => search(genreEls[0], resolve));
+                if (searchRes.success && searchRes.data) {
+                    for (const item of searchRes.data) {
+                        if (recommendations.length >= 10) break;
+                        if (recSeenUrls.has(item.url)) continue;
+                        recSeenUrls.add(item.url);
+                        if (item.title === title) continue;
+                        recommendations.push(item);
+                    }
+                }
+            } catch (e) { /* Genre search failed */ }
+        }
+
+        cb({ success: true, data: new MultimediaItem({ type: "anime", title, description, posterUrl, episodes, year: displayYear, score, status, genres: genreEls.length > 0 ? genreEls : undefined, recommendations: recommendations.length > 0 ? recommendations : undefined }) });
     } catch (e) { log('load error: ' + url, e); cb({ success: false, errorCode: 'LOAD_ERROR', message: String(e) }); }
 }
 
@@ -518,26 +1118,148 @@ async function loadStreams(url, cb) {
         const res = await axios.get(url, { headers });
         const html = res.data;
         const streams = [];
-        // Extract iframes for video sources
+        const seenStreamUrls = new Set();
+
+        // ── Helper: decode HTML entities in URLs ──
+        function decodeHtmlEntities(str) {
+            return str.replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&#034;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+        }
+
+        // ── Helper: add stream result with deduplication ──
+        async function tryAddStream(playerUrl, label) {
+            if (!playerUrl) return;
+            playerUrl = decodeHtmlEntities(playerUrl);
+            // Fix protocol-relative URLs
+            if (playerUrl.startsWith('//')) playerUrl = 'https:' + playerUrl;
+            // Dedup
+            if (seenStreamUrls.has(playerUrl)) return;
+            seenStreamUrls.add(playerUrl);
+            try {
+                const streamRes = await Extractors.resolveStream(playerUrl);
+                if (streamRes) {
+                    streamRes.quality = label;
+                    streams.push(streamRes);
+                }
+            } catch (e) { log('Stream resolve failed: ' + playerUrl, e); }
+        }
+
+        // ── Strategy 1: Iframe extraction with trembed/tremor support ──
+        // Collect all iframes from page, resolve trembed URLs, process in parallel
         const iframeRegex = /<iframe[^>]*src=["']([^"']+)["'][^>]*>/gi;
-        let match;
-        while ((match = iframeRegex.exec(html)) !== null) {
-            const embedUrl = match[1];
-            if (embedUrl && !embedUrl.includes('ads') && !embedUrl.includes('google') && !embedUrl.includes('facebook')) {
-                const streamRes = await Extractors.resolveStream(embedUrl);
-                if (streamRes) streams.push(streamRes);
+        const embedUrls = [];
+        let iframeMatch;
+        while ((iframeMatch = iframeRegex.exec(html)) !== null) {
+            const embedUrl = iframeMatch[1];
+            if (embedUrl && !embedUrl.includes('ads') && !embedUrl.includes('google') && !embedUrl.includes('facebook') && !embedUrl.includes('doubleclick')) {
+                embedUrls.push(embedUrl);
             }
         }
-        // Fallback: try to find direct video URLs in script tags
-        const videoRegex = /file["']?\s*:\s*["']?(https?:\/\/[^"'\s]+\.m3u8[^"'\s]*|https?:\/\/[^"'\s]+\.mp4[^"'\s]*)["']?/gi;
-        let vMatch;
-        while ((vMatch = videoRegex.exec(html)) !== null) {
-            streams.push(new StreamResult({
-                url: vMatch[1],
-                quality: 'Auto',
-                source: 'Direct'
+        // Resolve all embed URLs in parallel for speed
+        if (embedUrls.length > 0) {
+            const results = await Promise.all(embedUrls.map(async (embedUrl) => {
+                try {
+                    // trembed/tremor URLs need to be fetched first to resolve the actual player iframe
+                    if (embedUrl.includes('trembed=') || embedUrl.includes('tremor=')) {
+                        const trembedRes = await axios.get(embedUrl, { headers });
+                        const trembedHtml = trembedRes.data;
+                        // Extract inner iframe from trembed response
+                        const innerIframe = trembedHtml.match(/<iframe[^>]*src=["']([^"']+)["'][^>]*>/i);
+                        if (innerIframe && innerIframe[1]) {
+                            return await Extractors.resolveStream(innerIframe[1]);
+                        }
+                        // Fallback: find direct video URL in trembed response
+                        const videoFile = trembedHtml.match(/file["']?\s*:\s*["']?([^"'\s]+(?:m3u8|mp4)[^"'\s]*)["']?/i);
+                        if (videoFile) {
+                            let vUrl = videoFile[1];
+                            if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                            else if (!vUrl.startsWith('http')) {
+                                try {
+                                    const origin = embedUrl.match(/^https?:\/\/[^\/]+/)[0];
+                                    vUrl = origin + (vUrl.startsWith('/') ? '' : '/') + vUrl;
+                                } catch (e) {
+                                    vUrl = 'https:' + (vUrl.startsWith('/') ? '' : '/') + vUrl;
+                                }
+                            }
+                            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(vUrl), quality: 'Auto', source: 'Trembed', headers: { 'Referer': embedUrl } });
+                        }
+                    } else {
+                        return await Extractors.resolveStream(embedUrl);
+                    }
+                } catch (e) { return null; }
+                return null;
             }));
+            results.forEach(r => { if (r && !seenStreamUrls.has(r.url)) { seenStreamUrls.add(r.url); streams.push(r); } });
         }
+
+        // ── Strategy 2: Lazyload data-src attributes (trembed, player URLs) ──
+        if (streams.length === 0) {
+            const lazyRegex = /data-src=["']([^"']+(?:trembed|tremor|player|embed)[^"']*)["']/gi;
+            const lazyUrls = [];
+            let lMatch;
+            while ((lMatch = lazyRegex.exec(html)) !== null) {
+                if (lMatch[1]) lazyUrls.push(lMatch[1]);
+            }
+            if (lazyUrls.length > 0) {
+                const results = await Promise.all(lazyUrls.map(async (lazyUrl) => {
+                    try {
+                        const fullUrl = lazyUrl.startsWith('http') ? lazyUrl : baseUrl + (lazyUrl.startsWith('/') ? '' : '/') + lazyUrl;
+                        if (lazyUrl.includes('trembed=') || lazyUrl.includes('tremor=')) {
+                            const trembedRes = await axios.get(fullUrl, { headers });
+                            const trembedHtml = trembedRes.data;
+                            const innerIframe = trembedHtml.match(/<iframe[^>]*src=["']([^"']+)["'][^>]*>/i);
+                            if (innerIframe && innerIframe[1]) {
+                                return await Extractors.resolveStream(innerIframe[1]);
+                            }
+                        } else {
+                            return await Extractors.resolveStream(fullUrl);
+                        }
+                    } catch (e) { return null; }
+                    return null;
+                }));
+                results.forEach(r => { if (r && !seenStreamUrls.has(r.url)) { seenStreamUrls.add(r.url); streams.push(r); } });
+            }
+        }
+
+        // ── Strategy 3: Direct video URLs in script tags ──
+        if (streams.length === 0) {
+            const videoRegexes = [
+                // file|url|source|src = "https://...mp4|m3u8"
+                /(?:file|url|source|src)["']?\s*[:=]\s*["'](https?:\/\/[^"'\s]+\.(?:mp4|m3u8|mkv|webm)[^"'\s]*)["']/gi,
+                // Direct <source> tags
+                /<source\s+src=["']([^"']+\.(?:mp4|m3u8|mkv|webm)[^"']*)["']/gi,
+                // #EXTINF pattern from HLS playlists
+                /#EXTINF[^,]*,[^\n]*\n(https?:\/\/[^\s]+)/gi,
+                // Simple file: pattern (common in WordPress video embedders)
+                /["']file["']?\s*[:=]\s*["'](https?:\/\/[^"']+)["']/gi
+            ];
+            for (const vRegex of videoRegexes) {
+                if (streams.length > 0) break;
+                let vMatch;
+                while ((vMatch = vRegex.exec(html)) !== null) {
+                    const videoUrl = vMatch[1];
+                    if (videoUrl && !videoUrl.includes('.js') && !videoUrl.includes('.css') && !videoUrl.includes('analytics') && !videoUrl.includes('tracking')) {
+                        await tryAddStream(videoUrl, 'Direct');
+                    }
+                }
+            }
+        }
+
+        // ── Strategy 4: WordPress video shortcode embeds [video] and wp-playlist ──
+        if (streams.length === 0) {
+            // WordPress [video src="..."] shortcode
+            const wpVideo = html.match(/\[video[^\]]*src=["']([^"']+)["'][^\]]*\]/i);
+            if (wpVideo && wpVideo[1]) {
+                await tryAddStream(wpVideo[1], 'Video');
+            }
+            // WordPress wp-playlist items
+            const playlistRegex = /src="(https?:\/\/[^"]+\.(?:mp4|m3u8)[^"]*)"[^>]*\bitem\b/gi;
+            let plMatch;
+            while ((plMatch = playlistRegex.exec(html)) !== null) {
+                if (streams.length >= 5) break;
+                await tryAddStream(plMatch[1], 'Playlist');
+            }
+        }
+
         cb({ success: true, data: streams });
     } catch (e) { log('loadStreams error: ' + url, e); cb({ success: false, errorCode: 'STREAM_ERROR', message: String(e) }); }
 }
