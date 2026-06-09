@@ -29,7 +29,7 @@
   {
     "packageName": "com.gowaru.kaisen.animesultra",
     "name": "AnimesUltra",
-    "version": 6,
+    "version": 7,
     "baseUrl": "https://ww.animesultra.org",
     "domains": [
       {
@@ -56,7 +56,7 @@
   {
     "packageName": "com.gowaru.kaisen.animevostfr",
     "name": "AnimeVOSTFR",
-    "version": 5,
+    "version": 6,
     "baseUrl": "https://animevostfr.org/",
     "description": "AnimeVOSTFR - Streaming anime VOSTFR",
     "authors": [
@@ -73,7 +73,7 @@
   {
     "packageName": "com.gowaru.kaisen.frenchanime",
     "name": "French-Anime",
-    "version": 6,
+    "version": 7,
     "baseUrl": "https://french-anime.com",
     "domains": [
       {
