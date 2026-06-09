@@ -1,0 +1,7 @@
+feat(animevostfr): amélioration saisons, OAV/Spéciaux, merge VF/VOSTFR et buildEpisodeName
+
+- buildEpisodeName() : noms d'épisodes incluant saison, type (Film/OAV/Spécial) et (VF)/(VOSTFR)
+- findAlternativeVersionFromPage() : détection et fusion des épisodes de la version VF↔VOSTFR alternative
+- Alternative merge : fetch de la page alternative, validation du titre (cleanTitle), dédup par (season,ep,dubStatus)
+- Film fallback : utilise buildEpisodeName() avec dubStatus détecté
+- loadStreams() : filtrage des serveurs par langue (expectedDubStatus + context autour des server items/content_player)

@@ -885,6 +885,50 @@ function detectDubStatus(url, title) {
         return { season: undefined, contentType: undefined };
     }
 
+    // Détecte si la page a une version alternative VF ↔ VOSTFR et trouve son URL
+    function findAlternativeVersionFromPage(html, currentUrl) {
+        const lowerUrl = currentUrl.toLowerCase();
+        let currentVersion = null;
+        let alternativeUrl = null;
+
+        if (/\/vostfr|[-_]vostfr|\bvostfr\b/i.test(lowerUrl)) {
+            currentVersion = 'VOSTFR';
+        } else if (/\/vf|[-_]vf(?!o)|\bvf\b(?!o)/i.test(lowerUrl)) {
+            currentVersion = 'VF';
+        }
+        if (!currentVersion) return { currentVersion: null, alternativeUrl: null };
+
+        // Extraire le slug de l'animé depuis l'URL
+        const slugMatch = currentUrl.match(/\/(\d+-[\w-]+)\.html/i);
+        let animeKey = slugMatch ? slugMatch[1].toLowerCase() : '';
+        // Supprimer les suffixes VF/VOSTFR du slug
+        while (animeKey.match(/[-_](vf|vostfr|vost|vo|dll|au)$/i)) {
+            animeKey = animeKey.replace(/[-_](vf|vostfr|vost|vo|dll|au)$/gi, '');
+        }
+        if (!animeKey) return { currentVersion, alternativeUrl: null };
+
+        // Chercher dans le HTML de la page un lien vers la version alternative
+        const altPath = currentVersion === 'VOSTFR' ? 'vf' : 'vostfr';
+        const urlPatterns = [
+            // /animes/1234-one-piece-suffix
+            new RegExp('href=["\']([^"\']*?/animes/\\d+-[^"\']*' + altPath + '[^"\']*\.html)["\']', 'gi'),
+            // /animes/1234-suffix-vf
+            new RegExp('href=["\']([^"\']*' + animeKey.replace(/[-_]/g, '[-_]') + '[-_]' + altPath + '[^"\']*\.html)["\']', 'gi'),
+            // Any link with the anime key containing the alternative path
+            new RegExp('href=["\']([^"\']*' + altPath + '.*?' + animeKey.replace(/[-_]/g, '[-_]') + '[^"\']*\.html)["\']', 'gi'),
+        ];
+        for (const regex of urlPatterns) {
+            if (alternativeUrl) break;
+            const m = regex.exec(html);
+            if (m && m[1]) {
+                const href = m[1];
+                alternativeUrl = href.startsWith('http') ? href : baseUrl + (href.startsWith('/') ? '' : '/') + href;
+            }
+        }
+
+        return { currentVersion, alternativeUrl };
+    }
+
 async function load(url, cb) {
     try {
         const res = await axios.get(url, { headers });
@@ -944,6 +988,30 @@ async function load(url, cb) {
             return undefined;
         }
 
+        // Build a readable episode name with season + content type + dub status
+        function buildEpisodeName(baseTitle, epNum, seasonNum, contentType, dubStatus) {
+            let parts = [];
+            // Season prefix (Saison X, Film, OAV, etc.)
+            if (contentType === 'Film') {
+                parts.push('Film');
+            } else if (contentType === 'OAV') {
+                parts.push('OAV' + (seasonNum ? ' ' + seasonNum : ''));
+            } else if (contentType === 'Spécial') {
+                parts.push('Spécial' + (seasonNum ? ' ' + seasonNum : ''));
+            } else if (seasonNum) {
+                parts.push('Saison ' + seasonNum);
+            }
+            // Episode title/number
+            parts.push(baseTitle || ('Épisode ' + epNum));
+            // Dub status suffix
+            if (dubStatus === 'dub') {
+                parts.push('(VF)');
+            } else if (dubStatus === 'sub') {
+                parts.push('(VOSTFR)');
+            }
+            return parts.join(' ');
+        }
+
         // Toroplay4: episode-item grouped under VF/VOSTFR headings, possibly organized by season
         doc.querySelectorAll('.episode-item').forEach(el => {
             const linkEl = el.querySelector('.episode-link') || el.querySelector('a');
@@ -977,8 +1045,9 @@ async function load(url, cb) {
                 const tripleKey = `${seasonNum || 1}-${epNum}-${dubStatus}`;
                 if (seenEpTriples.has(tripleKey)) return;
                 seenEpTriples.add(tripleKey);
+                const epName = buildEpisodeName(epTitle || '', epNum, seasonNum, contentType, dubStatus);
                 episodes.push(new Episode({
-                    name: epTitle || ('Episode ' + epNum),
+                    name: epName,
                     episode: epNum,
                     url: fullEpUrl,
                     season: seasonNum || 1,
@@ -988,20 +1057,79 @@ async function load(url, cb) {
                 }));
             }
         });
+
+        // ── Détecter et fusionner la version alternative VF/VOSTFR ──
+        // Si la page actuelle est VF, cherche le lien vers la version VOSTFR et vice-versa
+        const altResult = findAlternativeVersionFromPage(html, url);
+        if (altResult.alternativeUrl) {
+            const fullAltUrl = altResult.alternativeUrl.startsWith('http') ? altResult.alternativeUrl : baseUrl + altResult.alternativeUrl;
+            try {
+                const altRes = await axios.get(fullAltUrl, { headers });
+                if (altRes.status === 200 && typeof altRes.data === 'string' && altRes.data.length > 500) {
+                    const altDoc = await parseHtml(altRes.data);
+                    // Vérifier qu'il s'agit bien du même animé (même titre, en ignorant les suffixes VF/VOSTFR)
+                    const altTitle = altDoc.querySelector('h1.Title')?.textContent.trim() || altDoc.querySelector('.Title')?.textContent.trim();
+                    const cleanTitle = t => t.replace(/[\s\-_]*\(?(?:VF|VOSTFR|VOST|VO)\)?[\s\-_]*$/gi, '').trim();
+                    if (altTitle && title && cleanTitle(altTitle).toLowerCase() !== cleanTitle(title).toLowerCase()) {
+                        log('Alternative version title mismatch, skipping merge', { main: title, alt: altTitle });
+                    } else {
+                        const altDubStatus = altResult.currentVersion === 'VOSTFR' ? 'dub' : 'sub';
+                        // Extraire les épisodes de la version alternative
+                        altDoc.querySelectorAll('.episode-item').forEach(el => {
+                            const linkEl = el.querySelector('.episode-link') || el.querySelector('a');
+                            const epUrl = linkEl?.getAttribute('href');
+                            const epTitle = linkEl?.textContent.trim();
+                            if (epUrl) {
+                                const fullEpUrl = epUrl.startsWith('http') ? epUrl : baseUrl + epUrl;
+                                if (seenEpUrls.has(fullEpUrl)) return;
+                                seenEpUrls.add(fullEpUrl);
+                                let epNum = extractEpisodeNumber(epTitle);
+                                const headingSeason = detectSeasonFromHeading(el);
+                                if (epNum === undefined) {
+                                    if (headingSeason.contentType) {
+                                        epNum = 1;
+                                    } else {
+                                        epNum = episodes.length + 1;
+                                    }
+                                }
+                                const titleDetected = detectSeasonAndType(epTitle);
+                                const seasonNum = headingSeason.season !== undefined ? headingSeason.season : titleDetected.season;
+                                const contentType = headingSeason.contentType || titleDetected.contentType;
+                                const tripleKey = `${seasonNum || 1}-${epNum}-${altDubStatus}`;
+                                if (seenEpTriples.has(tripleKey)) return;
+                                seenEpTriples.add(tripleKey);
+                                const epName = buildEpisodeName(epTitle || '', epNum, seasonNum, contentType, altDubStatus);
+                                episodes.push(new Episode({
+                                    name: epName,
+                                    episode: epNum,
+                                    url: fullEpUrl,
+                                    season: seasonNum || 1,
+                                    posterUrl: posterUrl,
+                                    contentType: contentType,
+                                    dubStatus: altDubStatus
+                                }));
+                            }
+                        });
+                    }
+                }
+            } catch (e) { /* Alternative fetch failed, skip */ }
+        }
+
         // Film fallback: no episodes → extract player iframe URL (trembed)
         if (episodes.length === 0) {
             const playerIframe = doc.querySelector('.TPlayerTb iframe[src], .TPlayerCn iframe[src], #player iframe[src]');
             if (playerIframe) {
                 const playerUrl = playerIframe.getAttribute('src');
+                const fallbackDubStatus = detectDubStatus(url, title);
                 if (playerUrl) {
                     episodes.push(new Episode({
-                        name: title || 'Film',
+                        name: buildEpisodeName(title || 'Film', 1, 1, 'Film', fallbackDubStatus),
                         episode: 1,
                         url: playerUrl.startsWith('http') ? playerUrl : baseUrl + playerUrl,
                         season: 1,
                         posterUrl: posterUrl,
                         contentType: 'Film',
-                        dubStatus: detectDubStatus(url, title)
+                        dubStatus: fallbackDubStatus
                     }));
                 }
             }
@@ -1135,8 +1263,22 @@ async function loadStreams(url, cb) {
 
         const fullStoryHtml = cleanAjaxHtml(epRes.data);
 
+        // ── Détecter la langue attendue depuis l'URL de l'épisode ──
+        // Le full-story.php AJAX peut retourner les serveurs VF ET VOSTFR mélangés.
+        // On filtre pour ne garder que ceux qui correspondent à la langue de l'épisode.
+        const expectedDubStatus = getDubStatusFromPageUrl(url) || detectDubStatus(url, '');
+
+        // Vérifie si le texte/contexte d'un serveur correspond à la langue attendue
+        function serverMatchesLanguage(embedUrl, context) {
+            if (!expectedDubStatus || expectedDubStatus === 'none') return true;
+            // Détecter la langue du serveur à partir de l'embed URL ET du contexte texte
+            const serverLang = detectDubStatus(embedUrl || '', context || '');
+            if (serverLang === 'none') return true; // Impossible de déterminer → on inclut
+            return serverLang === expectedDubStatus;
+        }
+
         // ── Strategy 1: Server items (data-server-id / data-embed) from AJAX or page ──
-        // Toroplay4 pattern: <div data-server-id="1" data-embed="URL">
+        // Toroplay4 pattern: <div data-server-id="1" data-embed="URL">Serveur VF</div>
         const searchSource = fullStoryHtml || html;
         const serverIdRegexes = [
             // data-server-id BEFORE data-embed
@@ -1174,6 +1316,13 @@ async function loadStreams(url, cb) {
 
                 // Dedup by server ID
                 if (streams.some(s => s.quality === 'Serveur ' + serverId)) continue;
+
+                // ── Filtrer par langue : vérifier le contexte texte autour du serveur ──
+                const matchContext = searchSource.substring(
+                    Math.max(0, sMatch.index - 80),
+                    Math.min(searchSource.length, sMatch.index + 250)
+                );
+                if (!serverMatchesLanguage(embedUrl, matchContext)) continue;
 
                 let playerUrl = embedUrl;
                 // Try to get actual player URL from content_player_X div in AJAX
@@ -1220,6 +1369,12 @@ async function loadStreams(url, cb) {
                 const vid = cpMatch[2].trim();
                 // Skip if content_player is for a server already resolved
                 if (streams.some(s => s.quality && s.quality.includes('Serveur ' + num))) continue;
+                // ── Filtrer par langue : vérifier le contexte autour du content_player ──
+                const cpContext = searchCp.substring(
+                    Math.max(0, cpMatch.index - 80),
+                    Math.min(searchCp.length, cpMatch.index + 150)
+                );
+                if (!serverMatchesLanguage(vid, cpContext)) continue;
                 if (vid && hostPatterns[num]) {
                     // If the content_player value looks like a full URL, use it directly
                     if (vid.startsWith('http://') || vid.startsWith('https://')) {
