@@ -1,7 +1,7 @@
 {
   "packageName": "com.gowaru.kaisen.vostfree",
   "name": "Vostfree",
-  "version": 4,
+  "version": 5,
   "baseUrl": "https://vostfree.ws",
   "description": "Vostfree - Animes VF et VOSTFR en streaming",
   "authors": [

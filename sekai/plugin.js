@@ -197,26 +197,76 @@ async function search(query, cb) {
         });
 
         // Also scrape from the embedded autocomplete array for missing items
-        const regex = /{ *label:s*"([^"]+)",s*image:s*"([^"]+)",s*url:s*"([^"]+)"/g;
-        let match;
-        while ((match = regex.exec(html)) !== null) {
-            const title = match[1];
-            let posterUrl = match[2];
-            let href = match[3];
-            // simple duplicate check based on url
-            let fullUrl = baseUrl + '/' + href;
-            if (!items.find(i => i.url === fullUrl)) {
-                if (href && !href.startsWith('http') && !href.startsWith('/') && href !== 'android' && href !== 'contact') {
-                    if (title.toLowerCase().includes(query.toLowerCase())) {
-                        items.push(new MultimediaItem({
-                            title: (title)?.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
-                            url: fullUrl,
-                            posterUrl: (function (p) { if (!p) return ''; if (p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : ''),
-                            type: 'anime',
-                            playbackPolicy: 'none'
-                        }));
-                    }
+        // Try multiple JSON formats (with and without whitespace, different key orders)
+        const autocompletePatterns = [
+            /\{\s*label\s*:\s*"([^"]+)",\s*image\s*:\s*"([^"]+)",\s*url\s*:\s*"([^"]+)"/gi,
+            /\{\s*label\s*:\s*"([^"]+)",\s*url\s*:\s*"([^"]+)",\s*image\s*:\s*"([^"]+)"/gi,
+            /\{\s*image\s*:\s*"([^"]+)",\s*label\s*:\s*"([^"]+)",\s*url\s*:\s*"([^"]+)"/gi
+        ];
+        for (const regex of autocompletePatterns) {
+            if (items.length >= 25) break;
+            regex.lastIndex = 0;
+            let match;
+            while ((match = regex.exec(html)) !== null) {
+                if (items.length >= 25) break;
+                // Determine which capture group is label, image, url based on pattern index
+                let title, posterUrl, href;
+                if (regex === autocompletePatterns[0]) {
+                    title = match[1]; posterUrl = match[2]; href = match[3];
+                } else if (regex === autocompletePatterns[1]) {
+                    title = match[1]; href = match[2]; posterUrl = match[3];
+                } else {
+                    posterUrl = match[1]; title = match[2]; href = match[3];
                 }
+                if (!href || !title) continue;
+                const fullUrl = baseUrl + '/' + href;
+                if (items.find(i => i.url === fullUrl)) continue;
+                if (href.startsWith('http') || href.startsWith('/') || href === 'android' || href === 'contact') continue;
+                if (!title.toLowerCase().includes(query.toLowerCase())) continue;
+                items.push(new MultimediaItem({
+                    title: title.replace(/[\n\r\t]+/g, ' ').replace(/\s\s+/g, ' ').trim(),
+                    url: fullUrl,
+                    posterUrl: (function (p) { if (!p) return ''; if (p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl ? (posterUrl.startsWith('http') ? posterUrl : baseUrl + (posterUrl.startsWith('/') ? '' : '/') + posterUrl) : ''),
+                    type: 'anime',
+                    playbackPolicy: 'none'
+                }));
+            }
+            if (items.length > 0) break;
+        }
+
+        // ── Fallback: try server-side search endpoints if no results yet ──
+        if (items.length === 0) {
+            const searchEndpoints = [
+                `${baseUrl}/?s=${encodeURIComponent(query)}`,
+                `${baseUrl}/search?q=${encodeURIComponent(query)}`,
+                `${baseUrl}/search/${encodeURIComponent(query)}/`
+            ];
+            for (const endpoint of searchEndpoints) {
+                if (items.length > 0) break;
+                try {
+                    const fallbackRes = await axios.get(endpoint, { headers });
+                    if (fallbackRes.data && typeof fallbackRes.data === 'string' && fallbackRes.data.length > 500) {
+                        const fallbackDoc = await parseHtml(fallbackRes.data);
+                        fallbackDoc.querySelectorAll('a[href]').forEach(el => {
+                            if (items.length >= 25) return;
+                            const href = el.getAttribute('href');
+                            const title = el.textContent.trim();
+                            if (href && title && title.toLowerCase().includes(query.toLowerCase())) {
+                                const fullUrl = href.startsWith('http') ? href : baseUrl + (href.startsWith('/') ? '' : '/') + href;
+                                if (items.find(i => i.url === fullUrl)) return;
+                                const imgEl = el.querySelector('img');
+                                const posterUrl = imgEl?.getAttribute('src') || imgEl?.getAttribute('data-src');
+                                items.push(new MultimediaItem({
+                                    title,
+                                    url: fullUrl,
+                                    posterUrl: (function (p) { if (!p) return ''; if (p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; })(posterUrl),
+                                    type: 'anime',
+                                    playbackPolicy: 'none'
+                                }));
+                            }
+                        });
+                    }
+                } catch (e) { }
             }
         }
 
@@ -408,6 +458,18 @@ async function loadStreams(url, cb) {
                     headers: { "Referer": "https://sekai.one/", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" }
                 }));
             });
+        }
+
+        // ── MAGIC_PROXY_v1 fallback: no streams found → let SkyStream execute JS ──
+        if (streams.length === 0) {
+            const proxyUrl = "MAGIC_PROXY_v1" + encodeBase64(url);
+            streams.push(new StreamResult({
+                url: proxyUrl,
+                quality: 'Auto',
+                source: 'Sekai',
+                headers: { 'Referer': baseUrl }
+            }));
+            log('MAGIC_PROXY_v1 fallback for: ' + url);
         }
 
         cb({ success: true, data: streams });

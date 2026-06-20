@@ -164,7 +164,8 @@ const Extractors = {
                 if (typeof res.data === 'string') {
                     const match = res.data.match(/<source\s+src=["']([^"']+)["']/i) ||
                         res.data.match(/video_source\s*=\s*["']([^"']+)["']/i) ||
-                        res.data.match(/file\s*:\s*["']([^"']+)["']/i);
+                        res.data.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                        res.data.match(/property="og:video"[^>]*content="([^"]+)"/i);
                     if (match) {
                         let videoUrl = match[1];
                         if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
@@ -183,7 +184,7 @@ const Extractors = {
         if (url.includes('vidmoly')) {
             try {
                 // vidmoly.to → vidmoly.net domain migration
-                let vidmolyUrl = url.replace(/vidmoly\.to/g, 'vidmoly.net');
+                let vidmolyUrl = url.replace(/vidmoly\.(to|biz)/g, 'vidmoly.net');
                 const vidmolyHeaders = {
                     'Referer': 'https://anime-sama.to/',
                     'Sec-Fetch-Dest': 'iframe',
@@ -217,7 +218,7 @@ const Extractors = {
                 }
 
                 // Fallback: try vidmoly.to domain if vidmoly.net didn't contain sources pattern
-                if (url.includes('vidmoly.to') && !html.includes('sources')) {
+                if ((url.includes('vidmoly.to') || url.includes('vidmoly.biz')) && !html.includes('sources')) {
                     res = await axios.get(url, { headers: vidmolyHeaders });
                     html = typeof res.data === 'string' ? res.data : '';
                     if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
@@ -238,7 +239,7 @@ const Extractors = {
                 }
             } catch (e) { }
             // Vidmoly: extraction failed, fallback to proxy with vidmoly.net domain
-            let proxyUrl = url.replace('vidmoly.to', 'vidmoly.net');
+            let proxyUrl = url.replace(/vidmoly\.(to|biz)/g, 'vidmoly.net');
             return new StreamResult({
                 url: "MAGIC_PROXY_v1" + encodeBase64(proxyUrl),
                 quality: 'Auto',
@@ -309,6 +310,45 @@ const Extractors = {
             });
         }
 
+        // --- Mail.ru ---
+        if (url.includes('my.mail.ru')) {
+            try {
+                const videoIdMatch = url.match(/\/video\/embed\/(\d+)/i);
+                if (videoIdMatch) {
+                    const videoId = videoIdMatch[1];
+                    const apiUrl = `https://my.mail.ru/+/video/meta/${videoId}`;
+                    const apiRes = await axios.get(apiUrl, { headers: { 'Referer': 'https://my.mail.ru/' } });
+                    const meta = apiRes.data;
+                    if (meta && meta.videos && Array.isArray(meta.videos) && meta.videos.length > 0) {
+                        const preferredOrder = ['1080p', '720p', '480p', '360p'];
+                        let bestVideo = null;
+                        for (const q of preferredOrder) {
+                            bestVideo = meta.videos.find(v => v.key === q);
+                            if (bestVideo) break;
+                        }
+                        if (!bestVideo) bestVideo = meta.videos[0];
+                        let videoUrl = bestVideo.url;
+                        if (videoUrl && videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                        if (videoUrl) {
+                            const quality = typeof bestVideo.key === 'string' ? bestVideo.key : 'Auto';
+                            return new StreamResult({
+                                url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl),
+                                quality: quality,
+                                source: 'MailRu',
+                                headers: { 'Referer': url }
+                            });
+                        }
+                    }
+                }
+            } catch (e) { log('Mail.ru extraction failed', e); }
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'MailRu',
+                headers: { 'Referer': baseUrl }
+            });
+        }
+
         // --- Uqload ---
         if (url.includes('uqload')) {
             try {
@@ -370,6 +410,70 @@ const Extractors = {
             });
         }
 
+        // --- Vidstream.pro (FingerprintJS anti-bot) ---
+        if (url.includes('vidstream.pro')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                if (typeof res.data === 'string') {
+                    const match = res.data.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                        res.data.match(/src\s*:\s*["']([^"']+)["']/i) ||
+                        res.data.match(/<source\s+src=["']([^"']+)["']/i) ||
+                        res.data.match(/<video[^>]+src=["']([^"']+)["']/i) ||
+                        res.data.match(/"url":\s*"([^"]+)"/i) ||
+                        res.data.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+                    if (match) {
+                        let videoUrl = match[1];
+                        videoUrl = videoUrl.replace(/&amp;/g, '&');
+                        if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                        return new StreamResult({
+                            url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl),
+                            quality: 'Auto',
+                            source: 'Vidstream',
+                            headers: { 'Referer': url }
+                        });
+                    }
+                }
+            } catch (e) { }
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'Vidstream',
+                headers: { 'Referer': baseUrl }
+            });
+        }
+
+        // --- Daisukianime (JS fingerprint + XHR anti-bot) ---
+        if (url.includes('daisukianime')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                if (typeof res.data === 'string') {
+                    const match = res.data.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                        res.data.match(/src\s*:\s*["']([^"']+)["']/i) ||
+                        res.data.match(/<source\s+src=["']([^"']+)["']/i) ||
+                        res.data.match(/<video[^>]+src=["']([^"']+)["']/i) ||
+                        res.data.match(/"url":\s*"([^"]+)"/i) ||
+                        res.data.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+                    if (match) {
+                        let videoUrl = match[1];
+                        videoUrl = videoUrl.replace(/&amp;/g, '&');
+                        if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                        return new StreamResult({
+                            url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl),
+                            quality: 'Auto',
+                            source: 'Daisukianime',
+                            headers: { 'Referer': url }
+                        });
+                    }
+                }
+            } catch (e) { }
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'Daisukianime',
+                headers: { 'Referer': baseUrl }
+            });
+        }
+
         // --- Embed4Me / Lpayer ---
         // SPA with AES-encrypted API + dynamic JS loading; direct extraction not feasible.
         // Falls back to MAGIC_PROXY for client-side rendering in the app's webview.
@@ -378,6 +482,331 @@ const Extractors = {
                 url: "MAGIC_PROXY_v1" + encodeBase64(url),
                 quality: 'Auto',
                 source: 'Embed4Me',
+                headers: { 'Referer': 'https://anime-sama.to/' }
+            });
+        }
+
+        // --- YourUpload / VidGuard ---
+        if (url.includes('yourupload') || url.includes('vidguard') || url.includes('vgfplay')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': 'https://anime-sama.to/' } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                }
+                const fm = html.match(/file\s*:\s*"([^"]+)"/i) ||
+                    html.match(/sources\s*:\s*\[\{[^}]*file\s*:\s*"([^"]+)"/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i);
+                if (fm) {
+                    return new StreamResult({
+                        url: "MAGIC_PROXY_v1" + encodeBase64(fm[1]),
+                        quality: 'Auto',
+                        source: 'YourUpload',
+                        headers: { 'Referer': url }
+                    });
+                }
+            } catch (e) { }
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'YourUpload',
+                headers: { 'Referer': 'https://anime-sama.to/' }
+            });
+        }
+
+        // --- Streamruby / StreamSB ---
+        if (url.includes('streamruby') || url.includes('streamsb') || url.includes('sbplay')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': 'https://anime-sama.to/', 'Accept': 'application/json,text/html,*/*' } });
+                let html = typeof res.data === 'string' ? res.data : (typeof res.data?.stream_url === 'string' ? res.data.stream_url : '');
+                if (res.data?.stream_url) {
+                    return new StreamResult({
+                        url: "MAGIC_PROXY_v1" + encodeBase64(res.data.stream_url),
+                        quality: 'Auto',
+                        source: 'StreamSB',
+                        headers: { 'Referer': url }
+                    });
+                }
+                if (html) {
+                    if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                        try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                    }
+                    const fm = html.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                        html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                        html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                        html.match(/<source\s+src=["']([^"']+)["']/i);
+                    if (fm) {
+                        let vUrl = fm[1];
+                        if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                        return new StreamResult({
+                            url: "MAGIC_PROXY_v1" + encodeBase64(vUrl),
+                            quality: 'Auto',
+                            source: 'StreamSB',
+                            headers: { 'Referer': url }
+                        });
+                    }
+                }
+            } catch (e) { }
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'StreamSB',
+                headers: { 'Referer': 'https://anime-sama.to/' }
+            });
+        }
+
+        // --- Mp4Upload ---
+        if (url.includes('mp4upload') || url.includes('mp4u')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': 'https://anime-sama.to/' } });
+                const html = typeof res.data === 'string' ? res.data : '';
+                const fm = html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({
+                        url: "MAGIC_PROXY_v1" + encodeBase64(vUrl),
+                        quality: 'Auto',
+                        source: 'Mp4Upload',
+                        headers: { 'Referer': url }
+                    });
+                }
+            } catch (e) { }
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'Mp4Upload',
+                headers: { 'Referer': 'https://anime-sama.to/' }
+            });
+        }
+
+        // --- Gofile / GoFile.io ---
+        if (url.includes('gofile') || url.includes('gofile.io')) {
+            try {
+                const apiMatch = url.match(/gofile\.io\/d\/([^\/?]+)/i);
+                if (apiMatch) {
+                    const contentId = apiMatch[1];
+                    const apiRes = await axios.get(`https://api.gofile.io/v2/files/${contentId}`, {
+                        headers: { 'Authorization': 'Bearer', 'Accept': 'application/json' }
+                    });
+                    if (apiRes.data?.data?.children) {
+                        const children = apiRes.data.data.children;
+                        for (const childId in children) {
+                            const child = children[childId];
+                            if (child.link && child.mimetype?.startsWith('video')) {
+                                return new StreamResult({
+                                    url: "MAGIC_PROXY_v1" + encodeBase64(child.link),
+                                    quality: 'Auto',
+                                    source: 'GoFile',
+                                    headers: { 'Referer': url }
+                                });
+                            }
+                        }
+                    }
+                }
+            } catch (e) { }
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'GoFile',
+                headers: { 'Referer': 'https://anime-sama.to/' }
+            });
+        }
+
+        // --- Speedostream / SpeedoCDN ---
+        if (url.includes('speedostream') || url.includes('speedocdn')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': 'https://anime-sama.to/' } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                }
+                const fm = html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({
+                        url: "MAGIC_PROXY_v1" + encodeBase64(vUrl),
+                        quality: 'Auto',
+                        source: 'SpeedoStream',
+                        headers: { 'Referer': url }
+                    });
+                }
+            } catch (e) { }
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'SpeedoStream',
+                headers: { 'Referer': 'https://anime-sama.to/' }
+            });
+        }
+
+        // --- Vembed.net ---
+        if (url.includes('vembed') || url.includes('vembed.net')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': 'https://anime-sama.to/' } });
+                const html = typeof res.data === 'string' ? res.data : '';
+                const fm = html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i) ||
+                    html.match(/<iframe[^>]*src=["']([^"']+)["'][^>]*>/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({
+                        url: "MAGIC_PROXY_v1" + encodeBase64(vUrl),
+                        quality: 'Auto',
+                        source: 'Vembed',
+                        headers: { 'Referer': url }
+                    });
+                }
+            } catch (e) { }
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'Vembed',
+                headers: { 'Referer': 'https://anime-sama.to/' }
+            });
+        }
+
+        // --- StreamWish ---
+        if (url.includes('streamwish') || url.includes('strwish') || url.includes('swish')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': 'https://anime-sama.to/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0' } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                }
+                const fm = html.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                    html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i) ||
+                    html.match(/(https?:\/\/[^"'\s]+\.(?:m3u8|mp4)[^"'\s]*)/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({
+                        url: "MAGIC_PROXY_v1" + encodeBase64(vUrl),
+                        quality: 'Auto',
+                        source: 'StreamWish',
+                        headers: { 'Referer': url }
+                    });
+                }
+            } catch (e) { }
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'StreamWish',
+                headers: { 'Referer': 'https://anime-sama.to/' }
+            });
+        }
+
+        // --- VidSrc (embedding API) ---
+        if (url.includes('vidsrc') || url.includes('vidsrc.to') || url.includes('vidsrc.me') || url.includes('vidsrc.cc')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': 'https://anime-sama.to/' } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                }
+                const fm = html.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                    html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i) ||
+                    html.match(/(https?:\/\/[^"'\s]+\.(?:m3u8|mp4)[^"'\s]*)/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({
+                        url: "MAGIC_PROXY_v1" + encodeBase64(vUrl),
+                        quality: 'Auto',
+                        source: 'VidSrc',
+                        headers: { 'Referer': url }
+                    });
+                }
+                const iframe = html.match(/<iframe[^>]*src=["']([^"']+)["'][^>]*>/i);
+                if (iframe && iframe[1]) {
+                    const iframeUrl = iframe[1].startsWith('http') ? iframe[1] : baseUrl + (iframe[1].startsWith('/') ? '' : '/') + iframe[1];
+                    return new StreamResult({
+                        url: "MAGIC_PROXY_v1" + encodeBase64(iframeUrl),
+                        quality: 'Auto',
+                        source: 'VidSrc',
+                        headers: { 'Referer': url }
+                    });
+                }
+            } catch (e) { }
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'VidSrc',
+                headers: { 'Referer': 'https://anime-sama.to/' }
+            });
+        }
+
+        // --- SuperVideo ---
+        if (url.includes('supervideo') || url.includes('supervideo.cc') || url.includes('supervideo.tv')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': 'https://anime-sama.to/' } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                }
+                const fm = html.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                    html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i) ||
+                    html.match(/(https?:\/\/[^"'\s]+\.(?:m3u8|mp4)[^"'\s]*)/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({
+                        url: "MAGIC_PROXY_v1" + encodeBase64(vUrl),
+                        quality: 'Auto',
+                        source: 'SuperVideo',
+                        headers: { 'Referer': url }
+                    });
+                }
+            } catch (e) { }
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'SuperVideo',
+                headers: { 'Referer': 'https://anime-sama.to/' }
+            });
+        }
+
+        // --- Stape (StreamWish network affiliate) ---
+        if (url.includes('stape') || url.includes('stape.me') || url.includes('systpe')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': 'https://anime-sama.to/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0' } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                }
+                const fm = html.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                    html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i) ||
+                    html.match(/(https?:\/\/[^"'\s]+\.(?:m3u8|mp4)[^"'\s]*)/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({
+                        url: "MAGIC_PROXY_v1" + encodeBase64(vUrl),
+                        quality: 'Auto',
+                        source: 'Stape',
+                        headers: { 'Referer': url }
+                    });
+                }
+            } catch (e) { }
+            return new StreamResult({
+                url: "MAGIC_PROXY_v1" + encodeBase64(url),
+                quality: 'Auto',
+                source: 'Stape',
                 headers: { 'Referer': 'https://anime-sama.to/' }
             });
         }
@@ -429,7 +858,7 @@ async function getHome(cb) {
         // ──────────────────────────────────────────────────────────
         const carouselItems = [];
         // Split HTML into slide blocks by ak-slide divs
-        const slideParts = html.split(/<div[^>]*class="[^"]*\bak-slide\b[^"]*"[^>]*>/gi);
+        const slideParts = html.split(/<div[^>]*class="[^"]*\bak-slide(?!\w|-)[^"]*"[^>]*>/gi);
         for (let si = 1; si < slideParts.length; si++) {
             const block = slideParts[si];
             // Must contain ak-slide-title (skip cloned/empty slides)
@@ -482,7 +911,10 @@ async function getHome(cb) {
         const dayBlocks = html.split(/<h2 class="titreJours[^>]*>/gi);
         for (let i = 1; i < dayBlocks.length; i++) {
             const block = dayBlocks[i];
-            const dayTitleMatch = block.match(/<\/svg>[\s\S]*?<\/a>\s*([^\s<][^<]+)\s*<a/i);
+            // Extract day title: try inside <h2> span, then between </a> and next <a>, then after </h2>
+            const dayTitleMatch = block.match(/<[^>]+class="titreJours[^"]*"[^>]*>([^<]+)</i) ||
+                block.match(/<\/svg>[\s\S]*?<\/a>\s*([^\s<][^<]+)\s*<a/i) ||
+                block.match(/<\/h2>\s*([^\n]+?)\s*<br/i);
             if (!dayTitleMatch) continue;
             const dayTitle = dayTitleMatch[1].trim();
 
@@ -532,10 +964,11 @@ async function getHome(cb) {
             let posterUrl = scanMatch[2];
             let title = scanMatch[3].trim();
 
-            const baseItemUrl = toRootUrl(url);                if (!seenURLs.has(baseItemUrl)) {
-                    seenURLs.add(baseItemUrl);
-                    if (!posterUrl.startsWith('http')) posterUrl = baseUrl + posterUrl;
-                    scanItems.push(new MultimediaItem({
+            const baseItemUrl = toRootUrl(url);
+            if (!seenURLs.has(baseItemUrl)) {
+                seenURLs.add(baseItemUrl);
+                if (!posterUrl.startsWith('http')) posterUrl = baseUrl + posterUrl;
+                scanItems.push(new MultimediaItem({
                     title: title + ' (Scan)',
                     url: baseItemUrl,
                     posterUrl: posterUrl,
@@ -556,10 +989,11 @@ async function getHome(cb) {
             let posterUrl = vfMatch[2];
             let title = vfMatch[3].trim();
 
-            const baseItemUrl = toRootUrl(url);                if (!seenURLs.has(baseItemUrl)) {
-                    seenURLs.add(baseItemUrl);
-                    if (!posterUrl.startsWith('http')) posterUrl = baseUrl + posterUrl;
-                    vfItems.push(new MultimediaItem({
+            const baseItemUrl = toRootUrl(url);
+            if (!seenURLs.has(baseItemUrl)) {
+                seenURLs.add(baseItemUrl);
+                if (!posterUrl.startsWith('http')) posterUrl = baseUrl + posterUrl;
+                vfItems.push(new MultimediaItem({
                     title: title + ' (VF)',
                     url: baseItemUrl,
                     posterUrl: posterUrl,
@@ -580,10 +1014,11 @@ async function getHome(cb) {
             let posterUrl = vostfrMatch[2];
             let title = vostfrMatch[3].trim();
 
-            const baseItemUrl = toRootUrl(url);                if (!seenURLs.has(baseItemUrl)) {
-                    seenURLs.add(baseItemUrl);
-                    if (!posterUrl.startsWith('http')) posterUrl = baseUrl + posterUrl;
-                    vostfrItems.push(new MultimediaItem({
+            const baseItemUrl = toRootUrl(url);
+            if (!seenURLs.has(baseItemUrl)) {
+                seenURLs.add(baseItemUrl);
+                if (!posterUrl.startsWith('http')) posterUrl = baseUrl + posterUrl;
+                vostfrItems.push(new MultimediaItem({
                     title: title + ' (VOSTFR)',
                     url: baseItemUrl,
                     posterUrl: posterUrl,
@@ -729,9 +1164,18 @@ async function load(url, cb) {
             description = descMatch[1].replace(/<[^>]+>/g, '').trim();
         }
 
-        // Extract status (En cours / Terminé)
+        // Extract genres (modern div/span structure)
+        const genres = [];
+        const genreRegex = /<span class="genre-pill">([^<]+)<\/span>/gi;
+        let gMatch;
+        while ((gMatch = genreRegex.exec(html)) !== null) {
+            const g = gMatch[1].trim();
+            if (g) genres.push(g);
+        }
+
+        // Extract status (En cours / Terminé) from modern div/span structure
         let status = undefined;
-        const statusMatch = html.match(/<td[^>]*class="lbl"[^>]*>\s*[ÉE]tat\s*:\s*<\/td>\s*<td[^>]*class="val"[^>]*>([\s\S]*?)<\/td>/i);
+        const statusMatch = html.match(/info-lbl[\s\S]*?État[\s\S]*?<span class="info-val">([^<]+)<\/span>/i);
         if (statusMatch) {
             const raw = statusMatch[1].trim().toLowerCase();
             if (/en\s*cours/i.test(raw)) status = 'ongoing';
@@ -828,8 +1272,14 @@ async function load(url, cb) {
         // Fetch all episode JS files in parallel
         let fetchResponses = [];
         if (typeof http_parallel !== 'undefined' && fetchRequests.length > 1) {
-            fetchResponses = await http_parallel(fetchRequests);
-        } else {
+            try {
+                fetchResponses = await http_parallel(fetchRequests);
+            } catch (e) {
+                fetchResponses = [];
+            }
+        }
+        // Fallback: sequential fetches if parallel failed or wasn't available
+        if (fetchResponses.length < fetchRequests.length) {
             for (const req of fetchRequests) {
                 try {
                     const r = await axios.get(req.url);
@@ -923,6 +1373,41 @@ async function load(url, cb) {
             return cb({ success: false, errorCode: 'EPISODES_NOT_FOUND', message: 'Impossible de parser les liens.' });
         }
 
+        // ── Extract related/recommended anime from page ──
+        const recommendations = [];
+        const recSeen = new Set();
+        // Try to find a section with similaire/related items
+        const recSection = html.match(/<section[^>]*>(?:[\s\S]*?Similaire[\s\S]*?)<\/section>/i) ||
+            html.match(/<div[^>]*class="[^"]*similar[^"]*"[^>]*>[\s\S]*?<\/div>/i) ||
+            html.match(/<div[^>]*class="[^"]*related[^"]*"[^>]*>[\s\S]*?<\/div>/i);
+        let recHtml = recSection ? recSection[0] : html;
+        const recRegex = /<a[^>]+href="([^"]*\/catalogue\/(?!scan)[^"]+)"[^>]*>[\s\S]*?<img[^>]+(?:data-src|src)="([^"]+)"[^>]*(?:alt="([^"]+)")?/gi;
+        let recMatch;
+        while ((recMatch = recRegex.exec(recHtml)) !== null && recommendations.length < 12) {
+            let recUrl = recMatch[1];
+            if (!recUrl.startsWith('http')) {
+                recUrl = baseUrl.replace(/\/$/, '') + '/' + recUrl.replace(/^\//, '');
+            }
+            const recRoot = recUrl.match(/(https?:\/\/[^\/]+\/catalogue\/[^\/]+)/);
+            const normalizedRecUrl = recRoot ? recRoot[1] + '/' : recUrl;
+            if (!recSeen.has(normalizedRecUrl) && normalizedRecUrl !== rootUrl) {
+                recSeen.add(normalizedRecUrl);
+                let recPoster = recMatch[2];
+                if (!recPoster.startsWith('http')) recPoster = baseUrl + recPoster;
+                let recTitle = recMatch[3] ? recMatch[3].trim() : '';
+                if (!recTitle) {
+                    const slugMatch = normalizedRecUrl.match(/\/catalogue\/([^\/]+)/);
+                    if (slugMatch) recTitle = slugMatch[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                }
+                recommendations.push(new MultimediaItem({
+                    title: recTitle + ' (Anime-Sama)',
+                    url: normalizedRecUrl,
+                    posterUrl: recPoster,
+                    type: "anime"
+                }));
+            }
+        }
+
         cb({
             success: true,
             data: new MultimediaItem({
@@ -932,7 +1417,9 @@ async function load(url, cb) {
                 posterUrl: posterUrl,
                 description: description,
                 status: status,
-                episodes: eps
+                genres: genres,
+                episodes: eps,
+                recommendations: recommendations.length > 0 ? recommendations : undefined
             })
         });
     } catch (e) {
@@ -967,6 +1454,11 @@ async function loadStreams(url, cb) {
                 else if (streamUrl.includes('hubcloud') || streamUrl.includes('hd-runtv')) sourceName = "HubCloud";
                 else if (streamUrl.includes('minochinos') || streamUrl.includes('vidhide')) sourceName = "Minochinos";
                 else if (streamUrl.includes('embed4me') || streamUrl.includes('lpayer')) sourceName = "Embed4Me";
+                else if (streamUrl.includes('myvi.ru')) sourceName = "Myvi";
+                else if (streamUrl.includes('uqload')) sourceName = "Uqload";
+                else if (streamUrl.includes('verystream')) sourceName = "Verystream";
+                else if (streamUrl.includes('vidstream.pro')) sourceName = "Vidstream";
+                else if (streamUrl.includes('daisukianime')) sourceName = "Daisukianime";
 
                 const extracted = await Extractors.resolveStream(streamUrl);
                 if (extracted) {
@@ -981,8 +1473,16 @@ async function loadStreams(url, cb) {
         const allResults = await Promise.all(promises);
         const results = allResults.flat();
 
+        // ── MAGIC_PROXY_v1 fallback: no streams found → let SkyStream execute JS ──
         if (results.length === 0) {
-            return cb({ success: false, errorCode: 'NO_STREAMS', message: "Aucune source n'a pu être extraite." });
+            const proxyUrl = "MAGIC_PROXY_v1" + encodeBase64(url);
+            results.push(new StreamResult({
+                url: proxyUrl,
+                quality: 'Auto',
+                source: 'AnimeSama',
+                headers: { 'Referer': 'https://anime-sama.to/' }
+            }));
+            log('MAGIC_PROXY_v1 fallback for: ' + url);
         }
 
         cb({ success: true, data: results });

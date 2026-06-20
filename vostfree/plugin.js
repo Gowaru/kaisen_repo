@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { MixDrop, StreamTape, Voe, Filemoon, DoodExtractor, HubCloud } from 'skystream-extractors/dist/index.js';
+import { getPlayerUrl } from '../shared.js';
 
 function encodeBase64(str) {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
@@ -150,7 +151,7 @@ const Extractors = {
         // --- Vidmoly ---
         if (url.includes('vidmoly')) {
             try {
-                let vidmolyUrl = url.replace(/vidmoly\.to/g, 'vidmoly.net');
+                let vidmolyUrl = url.replace(/vidmoly\.(to|biz)/g, 'vidmoly.net');
                 const vmHeaders = { 'Referer': baseUrl, 'Sec-Fetch-Dest': 'iframe', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0' };
                 let res = await axios.get(vidmolyUrl, { headers: vmHeaders });
                 let html = typeof res.data === 'string' ? res.data : '';
@@ -166,7 +167,7 @@ const Extractors = {
                     if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
                     return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl), quality: 'Auto', source: 'Vidmoly', headers: { 'Referer': vidmolyUrl } });
                 }
-                if (url.includes('vidmoly.to') && !html.includes('sources')) {
+                if ((url.includes('vidmoly.to') || url.includes('vidmoly.biz')) && !html.includes('sources')) {
                     res = await axios.get(url, { headers: vmHeaders });
                     html = typeof res.data === 'string' ? res.data : '';
                     if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) { try { html += '\n' + getAndUnpack(html); } catch (e) { } }
@@ -174,7 +175,7 @@ const Extractors = {
                     if (fm) { let v = fm[1]; if (v.startsWith('//')) v = 'https:' + v; return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(v), quality: 'Auto', source: 'Vidmoly', headers: { 'Referer': url } }); }
                 }
             } catch (e) { }
-            let proxyUrl = url.replace('vidmoly.to', 'vidmoly.net');
+            let proxyUrl = url.replace(/vidmoly\.(to|biz)/g, 'vidmoly.net');
             return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(proxyUrl), quality: 'Auto', source: 'Vidmoly', headers: { 'Referer': baseUrl } });
         }
 
@@ -204,6 +205,35 @@ const Extractors = {
                 }
             } catch (e) { }
             return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Myvi', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- Mail.ru ---
+        if (url.includes('my.mail.ru')) {
+            try {
+                const videoIdMatch = url.match(/\/video\/embed\/(\d+)/i);
+                if (videoIdMatch) {
+                    const videoId = videoIdMatch[1];
+                    const apiUrl = `https://my.mail.ru/+/video/meta/${videoId}`;
+                    const apiRes = await axios.get(apiUrl, { headers: { 'Referer': 'https://my.mail.ru/' } });
+                    const meta = apiRes.data;
+                    if (meta && meta.videos && Array.isArray(meta.videos) && meta.videos.length > 0) {
+                        const preferredOrder = ['1080p', '720p', '480p', '360p'];
+                        let bestVideo = null;
+                        for (const q of preferredOrder) {
+                            bestVideo = meta.videos.find(v => v.key === q);
+                            if (bestVideo) break;
+                        }
+                        if (!bestVideo) bestVideo = meta.videos[0];
+                        let videoUrl = bestVideo.url;
+                        if (videoUrl && videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                        if (videoUrl) {
+                            const quality = typeof bestVideo.key === 'string' ? bestVideo.key : 'Auto';
+                            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl), quality: quality, source: 'MailRu', headers: { 'Referer': url } });
+                        }
+                    }
+                }
+            } catch (e) { log('Mail.ru extraction failed', e); }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'MailRu', headers: { 'Referer': baseUrl } });
         }
 
         // --- Embed4Me / Lplayer ---
@@ -252,6 +282,221 @@ const Extractors = {
             return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Verystream', headers: { 'Referer': baseUrl } });
         }
 
+        // --- YourUpload / VidGuard ---
+        if (url.includes('yourupload') || url.includes('vidguard') || url.includes('vgfplay')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                }
+                const fm = html.match(/file\s*:\s*"([^"]+)"/i) ||
+                    html.match(/sources\s*:\s*\[\{[^}]*file\s*:\s*"([^"]+)"/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i);
+                if (fm) {
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(fm[1]), quality: 'Auto', source: 'YourUpload', headers: { 'Referer': url } });
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'YourUpload', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- Streamruby / StreamSB ---
+        if (url.includes('streamruby') || url.includes('streamsb') || url.includes('sbplay')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl, 'Accept': 'application/json,text/html,*/*' } });
+                let html = typeof res.data === 'string' ? res.data : (typeof res.data?.stream_url === 'string' ? res.data.stream_url : '');
+                if (res.data?.stream_url) {
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(res.data.stream_url), quality: 'Auto', source: 'StreamSB', headers: { 'Referer': url } });
+                }
+                if (html) {
+                    if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                        try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                    }
+                    const fm = html.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                        html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                        html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                        html.match(/<source\s+src=["']([^"']+)["']/i);
+                    if (fm) {
+                        let vUrl = fm[1];
+                        if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                        return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(vUrl), quality: 'Auto', source: 'StreamSB', headers: { 'Referer': url } });
+                    }
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'StreamSB', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- Mp4Upload ---
+        if (url.includes('mp4upload') || url.includes('mp4u')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                const html = typeof res.data === 'string' ? res.data : '';
+                const fm = html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(vUrl), quality: 'Auto', source: 'Mp4Upload', headers: { 'Referer': url } });
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Mp4Upload', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- Gofile / GoFile.io ---
+        if (url.includes('gofile') || url.includes('gofile.io')) {
+            try {
+                const apiMatch = url.match(/gofile\.io\/d\/([^\/?]+)/i);
+                if (apiMatch) {
+                    const contentId = apiMatch[1];
+                    const apiRes = await axios.get(`https://api.gofile.io/v2/files/${contentId}`, {
+                        headers: { 'Authorization': 'Bearer', 'Accept': 'application/json' }
+                    });
+                    if (apiRes.data?.data?.children) {
+                        const children = apiRes.data.data.children;
+                        for (const childId in children) {
+                            const child = children[childId];
+                            if (child.link && child.mimetype?.startsWith('video')) {
+                                return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(child.link), quality: 'Auto', source: 'GoFile', headers: { 'Referer': url } });
+                            }
+                        }
+                    }
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'GoFile', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- Speedostream / SpeedoCDN ---
+        if (url.includes('speedostream') || url.includes('speedocdn')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                }
+                const fm = html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(vUrl), quality: 'Auto', source: 'SpeedoStream', headers: { 'Referer': url } });
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'SpeedoStream', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- Vembed.net ---
+        if (url.includes('vembed') || url.includes('vembed.net')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                const html = typeof res.data === 'string' ? res.data : '';
+                const fm = html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i) ||
+                    html.match(/<iframe[^>]*src=["']([^"']+)["'][^>]*>/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(vUrl), quality: 'Auto', source: 'Vembed', headers: { 'Referer': url } });
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Vembed', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- StreamWish ---
+        if (url.includes('streamwish') || url.includes('strwish') || url.includes('swish')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0' } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                }
+                const fm = html.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                    html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i) ||
+                    html.match(/(https?:\/\/[^"'\s]+\.(?:m3u8|mp4)[^"'\s]*)/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(vUrl), quality: 'Auto', source: 'StreamWish', headers: { 'Referer': url } });
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'StreamWish', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- VidSrc (embedding API) ---
+        if (url.includes('vidsrc') || url.includes('vidsrc.to') || url.includes('vidsrc.me') || url.includes('vidsrc.cc')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                }
+                const fm = html.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                    html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i) ||
+                    html.match(/(https?:\/\/[^"'\s]+\.(?:m3u8|mp4)[^"'\s]*)/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(vUrl), quality: 'Auto', source: 'VidSrc', headers: { 'Referer': url } });
+                }
+                const iframe = html.match(/<iframe[^>]*src=["']([^"']+)["'][^>]*>/i);
+                if (iframe && iframe[1]) {
+                    const iframeUrl = iframe[1].startsWith('http') ? iframe[1] : baseUrl + (iframe[1].startsWith('/') ? '' : '/') + iframe[1];
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(iframeUrl), quality: 'Auto', source: 'VidSrc', headers: { 'Referer': url } });
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'VidSrc', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- SuperVideo ---
+        if (url.includes('supervideo') || url.includes('supervideo.cc') || url.includes('supervideo.tv')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                }
+                const fm = html.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                    html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i) ||
+                    html.match(/(https?:\/\/[^"'\s]+\.(?:m3u8|mp4)[^"'\s]*)/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(vUrl), quality: 'Auto', source: 'SuperVideo', headers: { 'Referer': url } });
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'SuperVideo', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- Stape (StreamWish network affiliate) ---
+        if (url.includes('stape') || url.includes('stape.me') || url.includes('systpe')) {
+            try {
+                const res = await axios.get(url, { headers: { 'Referer': baseUrl, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0' } });
+                let html = typeof res.data === 'string' ? res.data : '';
+                if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) {
+                    try { const u = getAndUnpack(html); if (u) html += '\n' + u; } catch (e) { }
+                }
+                const fm = html.match(/sources\s*:\s*\[["']([^"']+)["']\]/i) ||
+                    html.match(/file\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/src["']?\s*:\s*["']([^"']+)["']/i) ||
+                    html.match(/<source\s+src=["']([^"']+)["']/i) ||
+                    html.match(/(https?:\/\/[^"'\s]+\.(?:m3u8|mp4)[^"'\s]*)/i);
+                if (fm) {
+                    let vUrl = fm[1];
+                    if (vUrl.startsWith('//')) vUrl = 'https:' + vUrl;
+                    return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(vUrl), quality: 'Auto', source: 'Stape', headers: { 'Referer': url } });
+                }
+            } catch (e) { }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Stape', headers: { 'Referer': baseUrl } });
+        }
+
         // --- Direct video URLs ---
         if (url.match(/\.(mp4|m3u8|mkv|webm)(\?|$)/i)) {
             return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Direct', headers: { 'Referer': baseUrl } });
@@ -278,8 +523,8 @@ async function getHome(cb) {
             const imgEl = el.querySelector('img');
             const title = imgEl?.getAttribute('alt') || linkEl?.getAttribute('title') || linkEl?.textContent.trim();
             let url = linkEl?.getAttribute('href');
-            // Validate URL: skip non-anime links
-            if (url && !url.match(/\/\d+-[\w-]+\.html/) && !url.includes('/anime-') && !url.includes('/manga/') && !url.includes('/series/') && !url.includes('-vostfr') && !url.includes('-vf')) url = undefined;
+            // DLE format: /{ID}-{slug}.html — only accept this format for DLE sites
+            if (url && !url.match(/\/\d+-[\w-]+\.html/)) url = undefined;
             const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
             if (title && url && !seenUrls.has(url)) {
                 seenUrls.add(url);
@@ -300,8 +545,8 @@ async function getHome(cb) {
             const titleEl = el.querySelector('.alt, .title, .slider-title');
             const title = titleEl?.textContent.trim() || imgEl?.getAttribute('alt') || linkEl?.getAttribute('title');
             let url = linkEl?.getAttribute('href');
-            // Validate URL: skip non-anime links
-            if (url && !url.match(/\/\d+-[\w-]+\.html/) && !url.includes('/anime-') && !url.includes('/manga/') && !url.includes('/series/') && !url.includes('-vostfr') && !url.includes('-vf')) url = undefined;
+            // DLE format: /{ID}-{slug}.html — only accept this format for DLE sites
+            if (url && !url.match(/\/\d+-[\w-]+\.html/)) url = undefined;
             const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
             if (title && url && !seenUrls.has(url)) {
                 seenUrls.add(url);
@@ -321,8 +566,8 @@ async function getHome(cb) {
             const title = el.querySelector('.title, .info a')?.textContent.trim() || imgEl?.getAttribute('alt') || linkEl?.getAttribute('title');
             // URL from title link first (same element as title), then fallback
             let url = el.querySelector('.title a, .info a')?.getAttribute('href') || linkEl?.getAttribute('href');
-            // Validate URL: skip non-anime links
-            if (url && !url.match(/\/\d+-[\w-]+\.html/) && !url.includes('/anime-') && !url.includes('/manga/') && !url.includes('/series/') && !url.includes('-vostfr') && !url.includes('-vf')) url = undefined;
+            // DLE format: /{ID}-{slug}.html — only accept this format for DLE sites
+            if (url && !url.match(/\/\d+-[\w-]+\.html/)) url = undefined;
             const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
             if (title && url && !seenUrls.has(url)) {
                 seenUrls.add(url);
@@ -342,8 +587,8 @@ async function getHome(cb) {
             const imgEl = el.querySelector ? el.querySelector('img') : null;
             const title = imgEl?.getAttribute('alt') || linkEl?.getAttribute('title') || linkEl?.textContent.trim();
             let url = linkEl?.getAttribute('href');
-            // Validate URL: skip non-anime links
-            if (url && !url.match(/\/\d+-[\w-]+\.html/) && !url.includes('/anime-') && !url.includes('/manga/') && !url.includes('/series/') && !url.includes('-vostfr') && !url.includes('-vf')) url = undefined;
+            // DLE format: /{ID}-{slug}.html — only accept this format for DLE sites
+            if (url && !url.match(/\/\d+-[\w-]+\.html/)) url = undefined;
             const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
             if (title && url && title.length > 1 && !seenUrls.has(url)) {
                 seenUrls.add(url);
@@ -465,6 +710,55 @@ function detectDubStatus(url, title) {
         return 'none';
     }
 
+// Find alternative VF/VOSTFR version using DLE ID pairing (VF=even ID, VOSTFR=odd ID)
+function findAlternativeVostfreeUrl(url) {
+    const match = url.match(/\/(\d+)-/);
+    if (!match) return null;
+    const id = parseInt(match[1]);
+    if (id <= 0) return null;
+    // VF IDs are even, VOSTFR IDs are odd (VF=1346, VOSTFR=1347)
+    const isVf = id % 2 === 0;
+    const altId = isVf ? id + 1 : id - 1;
+    if (altId <= 0) return null;
+    const altUrl = url.replace(`/${id}-`, `/${altId}-`);
+    if (altUrl === url) return null;
+    return { altUrl, currentIsVf: isVf, altId };
+}
+
+// ── Sitemap fallback: find alternative anime URL from sitemap.xml ──
+async function fetchSitemapFallback(pageUrl) {
+    try {
+        const slugMatch = pageUrl.match(/\/(?:\d+-)?([\w-]+)\.html/);
+        if (!slugMatch) return null;
+        const slug = slugMatch[1].toLowerCase();
+        const res = await axios.get(baseUrl + '/sitemap.xml', { headers });
+        if (typeof res.data === 'string' && res.data.includes('<loc>')) {
+            const urlRegex = /<loc>(https?:\/\/[^<]+)<\/loc>/gi;
+            let match;
+            const candidates = [];
+            while ((match = urlRegex.exec(res.data)) !== null) {
+                const sitemapUrl = match[1];
+                const sitemapLower = sitemapUrl.toLowerCase();
+                if (sitemapLower.includes(slug) && /\/\d+-[\w-]+\.html/.test(sitemapUrl)) {
+                    candidates.push(sitemapUrl);
+                }
+            }
+            if (candidates.length === 0) return null;
+            // Prefer same version (VF/VOSTFR)
+            const isVf = /[-_]vf(?!o)/i.test(pageUrl);
+            const isVostfr = /vostfr/i.test(pageUrl);
+            for (const c of candidates) {
+                const cLower = c.toLowerCase();
+                if (isVf && /[-_]vf[^o]/.test(cLower)) return c;
+                if (isVostfr && cLower.includes('vostfr')) return c;
+            }
+            // Return first candidate
+            return candidates[0];
+        }
+    } catch (e) { log('Sitemap fetch failed', e); }
+    return null;
+}
+
 async function load(url, cb) {
     try {
         const res = await axios.get(url, { headers });
@@ -499,27 +793,67 @@ async function load(url, cb) {
         const statusEl = doc.querySelector('.Status, .status, .statut, [class*="status"], [class*="Status"]');
         const status = statusEl?.textContent?.trim()?.toLowerCase();
         const episodes = [];
-        // DLE episode patterns - option elements and links
-        const epRegex = /<option value=["']([^"']+)["'][^>]*>(.*?)<\/option>/gi;
-        let match;
-        while ((match = epRegex.exec(html)) !== null) {
-            const epUrl = match[1];
-            const epName = match[2].trim();
-            // Skip non-URL values (e.g. player button IDs like 'buttons_1' for films)
-            if (epUrl && epName && (epUrl.startsWith('http') || epUrl.startsWith('/') || epUrl.includes('.html'))) {
-                const detected = detectSeasonAndType(epName);
-                episodes.push(new Episode({
-                    name: epName,
-                    episode: parseInt(epName.match(/\d+/)?.[0] || episodes.length + 1),
-                    url: epUrl.startsWith('http') ? epUrl : baseUrl + epUrl,
-                    season: detected.season,
-                    posterUrl: posterUrl,
-                    contentType: detected.contentType,
-                    dubStatus: detectDubStatus(epUrl, epName)
-                }));
+
+        // ── Strategy 1: Extract episodes from <option> elements ──
+        // DLE options can contain URLs (/NNN-episode-N.html) or button IDs (buttons_N)
+        // buttons_N → content_player_N div → video ID/hash/URL
+        function parseOptions(htmlContent, domDoc) {
+            const results = [];
+            const seenUrls = new Set();
+            // Pattern 1: URL-type options (value contains .html or /episode)
+            const urlOptRegex = /<option[^>]*value=["']([^"']+(?:\.html|\/[^"']*episode[^"']*))["'][^>]*>([^<]+)<\/option>/gi;
+            let m;
+            while ((m = urlOptRegex.exec(htmlContent)) !== null) {
+                const epUrl = m[1];
+                const epName = m[2].trim();
+                if (epUrl && epName && !seenUrls.has(epUrl)) {
+                    seenUrls.add(epUrl);
+                    const detected = detectSeasonAndType(epName);
+                    results.push(new Episode({
+                        name: epName,
+                        episode: parseInt(epName.match(/\d+/)?.[0] || results.length + 1),
+                        url: epUrl.startsWith('http') ? epUrl : baseUrl + epUrl,
+                        season: detected.season,
+                        posterUrl: posterUrl,
+                        contentType: detected.contentType,
+                        dubStatus: detectDubStatus(epUrl, epName)
+                    }));
+                }
             }
+            // Pattern 2: Button-type options (value="buttons_N")
+            if (results.length === 0) {
+                const btnOptRegex = /<option[^>]*value=["']buttons_(\d+)["'][^>]*>([^<]+)<\/option>/gi;
+                while ((m = btnOptRegex.exec(htmlContent)) !== null) {
+                    const btnNum = m[1];
+                    const epName = m[2].trim();
+                    if (!epName) continue;
+                    // Find the corresponding content_player_N div
+                    const cpEl = (domDoc || doc).querySelector(`[id="content_player_${btnNum}"]`);
+                    if (cpEl) {
+                        const playerContent = cpEl.textContent.trim();
+                        const playerUrl = getPlayerUrl(playerContent, btnNum);
+                        if (playerUrl && !seenUrls.has(playerUrl)) {
+                            seenUrls.add(playerUrl);
+                            const detected = detectSeasonAndType(epName);
+                            results.push(new Episode({
+                                name: epName,
+                                episode: parseInt(epName.match(/\d+/)?.[0] || results.length + 1),
+                                url: playerUrl,
+                                season: detected.season,
+                                posterUrl: posterUrl,
+                                contentType: detected.contentType,
+                                dubStatus: detectDubStatus(url, epName)
+                            }));
+                        }
+                    }
+                }
+            }
+            return results;
         }
-        // Fallback: try link patterns
+        const optionEpisodes = parseOptions(html, doc);
+        episodes.push(...optionEpisodes);
+
+        // ── Strategy 2: Try link patterns (fallback) ──
         if (episodes.length === 0) {
             doc.querySelectorAll('a[href*="episode"], a[href*="ep-"], a[href*="/ep"]').forEach((el, index) => {
                 const epUrl = el.getAttribute('href');
@@ -538,23 +872,39 @@ async function load(url, cb) {
                 }
             });
         }
-        // Film fallback: no episodes → extract player IDs from content_player_X divs
+
+        // ── Strategy 3: Sitemap fallback ──
+        // If no episodes found, try to find alternative anime URL from sitemap.xml
         if (episodes.length === 0) {
-            // Host embed URL patterns (from vostfree anime.js)
-            const hostPatterns = {
-                '1': id => 'https://myvi.ru/player/embed/html/' + id,
-                '2': id => 'https://video.sibnet.ru/sh.php?video=' + id,
-                '5': id => 'https://uqload.io/embed-' + id + '.html',
-                '6': id => 'https://verystream.com/e/' + id
-            };
+            try {
+                const altUrl = await fetchSitemapFallback(url);
+                if (altUrl && altUrl !== url) {
+                    log('Sitemap fallback: trying ' + altUrl);
+                    const altRes = await axios.get(altUrl, { headers });
+                    if (altRes.status === 200 && typeof altRes.data === 'string' && altRes.data.length > 500) {
+                        const altHtml = altRes.data;
+                        const altDoc = await parseHtml(altHtml);
+                        const altEps = await parseOptions(altHtml, altDoc);
+                        if (altEps.length > 0) {
+                            episodes.push(...altEps);
+                            log(`Sitemap fallback found ${altEps.length} episodes from ${altUrl}`);
+                        }
+                    }
+                }
+            } catch (e) { log('Sitemap fallback failed', e); }
+        }
+
+        // ── Strategy 4: Film fallback (content_player divs direct) ──
+        if (episodes.length === 0) {
             for (const el of doc.querySelectorAll('[id^="content_player_"]')) {
                 const num = el.id.replace('content_player_', '');
                 const vid = el.textContent.trim();
-                if (vid && hostPatterns[num]) {
+                const playerUrl = getPlayerUrl(vid, num);
+                if (playerUrl) {
                     episodes.push(new Episode({
                         name: title || 'Film',
                         episode: 1,
-                        url: hostPatterns[num](vid),
+                        url: playerUrl,
                         season: 1,
                         posterUrl: posterUrl,
                         dubStatus: detectDubStatus(url, title)
@@ -562,7 +912,7 @@ async function load(url, cb) {
                     break;
                 }
             }
-            // Fallback: pass page URL to loadStreams for iframe extraction
+            // MAGIC_PROXY_v1 ultimate fallback
             if (episodes.length === 0) {
                 episodes.push(new Episode({
                     name: title || 'Film',
@@ -570,10 +920,58 @@ async function load(url, cb) {
                     url: url,
                     season: 1,
                     posterUrl: posterUrl,
+                    contentType: 'Film',
                     dubStatus: detectDubStatus(url, title)
                 }));
+                log('MAGIC_PROXY_v1 fallback for: ' + url);
             }
         }
+
+        // ── Alternative VF/VOSTFR version via DLE ID pairing ──
+        // VF uses even IDs, VOSTFR uses odd IDs (e.g., 1346→VF, 1347→VOSTFR)
+        const altInfo = findAlternativeVostfreeUrl(url);
+        if (altInfo) {
+            const currentDubStatus = detectDubStatus(url, title);
+            const altDubStatus = currentDubStatus === 'dub' ? 'sub' : (currentDubStatus === 'sub' ? 'dub' : 'none');
+            if (altDubStatus !== 'none') {
+                try {
+                    const altRes = await axios.get(altInfo.altUrl, { headers });
+                    if (altRes.status === 200 && typeof altRes.data === 'string' && altRes.data.length > 500) {
+                        const altHtml = altRes.data;
+                        const seenEpUrls = new Set(episodes.map(e => e.url));
+                        let altEpCount = 0;
+                        // Parse <option> elements from alternative page (same DLE format)
+                        const altEpRegex = /<option value=["']([^"']+)["'][^>]*>(.*?)<\/option>/gi;
+                        let altMatch;
+                        while ((altMatch = altEpRegex.exec(altHtml)) !== null) {
+                            const epUrl = altMatch[1];
+                            const epName = altMatch[2].trim();
+                            if (epUrl && epName && (epUrl.startsWith('http') || epUrl.startsWith('/') || epUrl.includes('.html'))) {
+                                const fullEpUrl = epUrl.startsWith('http') ? epUrl : baseUrl + epUrl;
+                                if (!seenEpUrls.has(fullEpUrl)) {
+                                    seenEpUrls.add(fullEpUrl);
+                                    const detected = detectSeasonAndType(epName);
+                                    episodes.push(new Episode({
+                                        name: epName + (altDubStatus === 'dub' ? ' (VF)' : ' (VOSTFR)'),
+                                        episode: parseInt(epName.match(/\d+/)?.[0] || episodes.length + 1),
+                                        url: fullEpUrl,
+                                        season: detected.season,
+                                        posterUrl: posterUrl,
+                                        contentType: detected.contentType,
+                                        dubStatus: altDubStatus
+                                    }));
+                                    altEpCount++;
+                                }
+                            }
+                        }
+                        if (altEpCount > 0) {
+                            log(`Alternative version loaded: ${altInfo.altUrl} (${altEpCount} episodes)`);
+                        }
+                    }
+                } catch (e) { log('Alternative version not available: ' + altInfo.altUrl, e); }
+            }
+        }
+
         // Extract recommendations from 'Animes Similaires' section
         const recommendations = [];
         const recItems = doc.querySelectorAll('.related-movies ul.content li, .related-movies li');
@@ -622,27 +1020,35 @@ async function loadStreams(url, cb) {
                 source: 'Direct'
             }));
         }
-        // Fallback: content_player_X divs (films with host embed IDs)
+        // Fallback: content_player_X divs via getPlayerUrl (centralized host patterns)
         if (streams.length === 0) {
-            const hostPatterns = {
-                '1': id => 'https://myvi.ru/player/embed/html/' + id,
-                '2': id => 'https://video.sibnet.ru/sh.php?video=' + id,
-                '5': id => 'https://uqload.io/embed-' + id + '.html',
-                '6': id => 'https://verystream.com/e/' + id
-            };
             const cpRegex = /id=["']content_player_(\d+)["'][^>]*>([^<]*)</gi;
             let cpMatch;
             while ((cpMatch = cpRegex.exec(html)) !== null) {
                 const num = cpMatch[1];
                 const vid = cpMatch[2].trim();
-                if (vid && hostPatterns[num]) {
-                    const hostUrl = hostPatterns[num](vid);
-                    const streamRes = await Extractors.resolveStream(hostUrl);
-                    if (streamRes) streams.push(streamRes);
-                    break;
+                if (vid) {
+                    const hostUrl = getPlayerUrl(vid, num);
+                    if (hostUrl) {
+                        const streamRes = await Extractors.resolveStream(hostUrl);
+                        if (streamRes) { streams.push(streamRes); break; }
+                    }
                 }
             }
         }
+
+        // ── MAGIC_PROXY_v1 fallback: no iframes or video found → let SkyStream execute JS ──
+        if (streams.length === 0) {
+            const proxyUrl = "MAGIC_PROXY_v1" + encodeBase64(url);
+            streams.push(new StreamResult({
+                url: proxyUrl,
+                quality: 'Auto',
+                source: 'Vostfree',
+                headers: { 'Referer': baseUrl }
+            }));
+            log('MAGIC_PROXY_v1 fallback for: ' + url);
+        }
+
         cb({ success: true, data: streams });
     } catch (e) { log('loadStreams error: ' + url, e); cb({ success: false, errorCode: 'STREAM_ERROR', message: String(e) }); }
 }

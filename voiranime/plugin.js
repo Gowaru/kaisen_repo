@@ -150,7 +150,7 @@ const Extractors = {
         // --- Vidmoly ---
         if (url.includes('vidmoly')) {
             try {
-                let vidmolyUrl = url.replace(/vidmoly\.to/g, 'vidmoly.net');
+                let vidmolyUrl = url.replace(/vidmoly\.(to|biz)/g, 'vidmoly.net');
                 const vmHeaders = { 'Referer': baseUrl, 'Sec-Fetch-Dest': 'iframe', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0' };
                 let res = await axios.get(vidmolyUrl, { headers: vmHeaders });
                 let html = typeof res.data === 'string' ? res.data : '';
@@ -166,7 +166,7 @@ const Extractors = {
                     if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
                     return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl), quality: 'Auto', source: 'Vidmoly', headers: { 'Referer': vidmolyUrl } });
                 }
-                if (url.includes('vidmoly.to') && !html.includes('sources')) {
+                if ((url.includes('vidmoly.to') || url.includes('vidmoly.biz')) && !html.includes('sources')) {
                     res = await axios.get(url, { headers: vmHeaders });
                     html = typeof res.data === 'string' ? res.data : '';
                     if (typeof getAndUnpack !== 'undefined' && html.includes('eval(function(p,a,c,k')) { try { html += '\n' + getAndUnpack(html); } catch (e) { } }
@@ -174,7 +174,7 @@ const Extractors = {
                     if (fm) { let v = fm[1]; if (v.startsWith('//')) v = 'https:' + v; return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(v), quality: 'Auto', source: 'Vidmoly', headers: { 'Referer': url } }); }
                 }
             } catch (e) { }
-            let proxyUrl = url.replace('vidmoly.to', 'vidmoly.net');
+            let proxyUrl = url.replace(/vidmoly\.(to|biz)/g, 'vidmoly.net');
             return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(proxyUrl), quality: 'Auto', source: 'Vidmoly', headers: { 'Referer': baseUrl } });
         }
 
@@ -203,6 +203,36 @@ const Extractors = {
                 }
             } catch (e) { }
             return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'Myvi', headers: { 'Referer': baseUrl } });
+        }
+
+        // --- Mail.ru ---
+        if (url.includes('my.mail.ru')) {
+            try {
+                const videoIdMatch = url.match(/\/video\/embed\/(\d+)/i);
+                if (videoIdMatch) {
+                    const videoId = videoIdMatch[1];
+                    const apiUrl = `https://my.mail.ru/+/video/meta/${videoId}`;
+                    const apiRes = await axios.get(apiUrl, { headers: { 'Referer': 'https://my.mail.ru/' } });
+                    const meta = apiRes.data;
+                    if (meta && meta.videos && Array.isArray(meta.videos) && meta.videos.length > 0) {
+                        // Select best quality: prefer 1080p over 720p, 480p, 360p
+                        const preferredOrder = ['1080p', '720p', '480p', '360p'];
+                        let bestVideo = null;
+                        for (const q of preferredOrder) {
+                            bestVideo = meta.videos.find(v => v.key === q);
+                            if (bestVideo) break;
+                        }
+                        if (!bestVideo) bestVideo = meta.videos[0];
+                        let videoUrl = bestVideo.url;
+                        if (videoUrl && videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+                        if (videoUrl) {
+                            const quality = typeof bestVideo.key === 'string' ? bestVideo.key : 'Auto';
+                            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(videoUrl), quality: quality, source: 'MailRu', headers: { 'Referer': url } });
+                        }
+                    }
+                }
+            } catch (e) { log('Mail.ru extraction failed', e); }
+            return new StreamResult({ url: "MAGIC_PROXY_v1" + encodeBase64(url), quality: 'Auto', source: 'MailRu', headers: { 'Referer': baseUrl } });
         }
 
         // --- Uqload ---
@@ -488,7 +518,37 @@ async function getHome(cb) {
         const results = {};
         const seenUrls = new Set();
 
-        // ── 1. Animes (page-item-detail) ──
+        // ── 1. VF/VOSTFR sections (from page-item-detail) ──
+        // Note: The Madara theme uses ?filter=subbed / ?filter=dubbed query params.
+        // On the homepage, VF/VOSTFR is detected from the anime title/URL suffix.
+        const vfItems = [];
+        const vostfrItems = [];
+        Array.from(doc.querySelectorAll('.page-item-detail')).forEach(el => {
+            const linkEl = el.querySelector('a');
+            const titleEl = el.querySelector('.post-title a, h3 a, h5 a, .title a');
+            const imgEl = el.querySelector('img');
+            const title = titleEl?.textContent.trim();
+            let url = titleEl?.getAttribute('href') || linkEl?.getAttribute('href');
+            if (!isValidAnimeUrl(url)) url = undefined;
+            if (!title || !url || seenUrls.has(url)) return;
+            // Check if title or URL indicates VF/VOSTFR
+            const text = title + ' ' + url;
+            const isVf = /\bVF\b|\(VF\)|-vf$/i.test(text);
+            const isVostfr = /\bVOSTFR\b|\(VOSTFR\)|-vostfr$/i.test(text);
+            const fullUrl = url.startsWith('http') ? url : baseUrl + url;
+            const posterUrl = fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src'));
+            if (isVf) {
+                seenUrls.add(url);
+                vfItems.push(new MultimediaItem({ title: title + ' (VF)', url: fullUrl, posterUrl, type: 'anime' }));
+            } else if (isVostfr) {
+                seenUrls.add(url);
+                vostfrItems.push(new MultimediaItem({ title: title + ' (VOSTFR)', url: fullUrl, posterUrl, type: 'anime' }));
+            }
+            // Items that are neither VF nor VOSTFR remain available for Section 2
+        });
+        if (vfItems.length > 0) results['Animes VF'] = vfItems;
+        if (vostfrItems.length > 0) results['Animes VOSTFR'] = vostfrItems;
+        // ── 2. Animes (page-item-detail) ──
         const items = [];
         Array.from(doc.querySelectorAll('#loop-content .page-item-detail, .page-item-detail')).forEach(el => {
             const linkEl = el.querySelector('a');
@@ -498,7 +558,7 @@ async function getHome(cb) {
             // URL from title element first (same source), then fallback
             let url = titleEl?.getAttribute('href') || linkEl?.getAttribute('href');
             // Validate URL: skip non-anime links (ads, trackers, social, etc.)
-            if (url && !url.match(/\/\d+-[\w-]+\.html/) && !url.includes('/anime/') && !url.includes('/anime-') && !url.includes('/manga/') && !url.includes('/series/')) url = undefined;
+            if (!isValidAnimeUrl(url)) url = undefined;
             const posterUrl = fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src'));
             if (title && url && !seenUrls.has(url)) {
                 seenUrls.add(url);
@@ -510,49 +570,36 @@ async function getHome(cb) {
         });
         if (items.length > 0) results['Animes'] = items;
 
-        // ── 2. VF/VOSTFR sections (c-tabs-item with language badges) ──
-        const vfItems = [];
-        const vostfrItems = [];
-        Array.from(doc.querySelectorAll('.c-tabs-item .c-tabs-item__content, .tab-content .tab-pane')).forEach(el => {
-            const linkEl = el.querySelector('a');
-            const titleEl = el.querySelector('.post-title a, h4 a, h3 a');
-            const imgEl = el.querySelector('img');
-            const title = titleEl?.textContent.trim();
-            // URL from title element first (same source), then fallback
-            let url = titleEl?.getAttribute('href') || linkEl?.getAttribute('href');
-            // Validate URL: skip non-anime links (ads, trackers, social, etc.)
-            if (url && !url.match(/\/\d+-[\w-]+\.html/) && !url.includes('/anime/') && !url.includes('/anime-') && !url.includes('/manga/') && !url.includes('/series/')) url = undefined;
-            if (!title || !url || seenUrls.has(url)) return;
-            const badgeEl = el.querySelector('.mg_status, .post-status .summary-content');
-            const badgeText = badgeEl?.textContent.trim().toUpperCase() || '';
-            const isVf = badgeText === 'VF' || /VF/.test(el.querySelector('.tabs-content')?.textContent || '');
-            const isVostfr = badgeText === 'VOSTFR' || /VOSTFR/.test(el.querySelector('.tabs-content')?.textContent || '');
-            seenUrls.add(url);
-            const fullUrl = url.startsWith('http') ? url : baseUrl + url;
-            const posterUrl = fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src'));
-            if (isVf) vfItems.push(new MultimediaItem({ title: title + ' (VF)', url: fullUrl, posterUrl, type: 'anime' }));
-            else if (isVostfr) vostfrItems.push(new MultimediaItem({ title: title + ' (VOSTFR)', url: fullUrl, posterUrl, type: 'anime' }));
-        });
-        if (vfItems.length > 0) results['Animes VF'] = vfItems;
-        if (vostfrItems.length > 0) results['Animes VOSTFR'] = vostfrItems;
-
-        // ── 3. Madara block areas (c-blog__heading + .row, section.block_area) ──
-        const blockAreaSections = [];
-        Array.from(doc.querySelectorAll('.c-blog__heading, section.block_area .block_area-header, .block_area .cat-heading')).forEach(heading => {
+        // ── 3. Madara block areas (c-blog__heading with c-blog-listing) ──
+        Array.from(doc.querySelectorAll('.c-blog__heading')).forEach(heading => {
             const sectionTitle = heading.textContent.trim();
             if (!sectionTitle || sectionTitle.length < 2 || results[sectionTitle]) return;
-            let container = heading.nextElementSibling;
-            if (!container) container = heading.closest('.block_area, section, .c-blog') || heading.parentElement;
+            // The structure is: .c-blog__heading → .c-nav-tabs (optional) → .c-blog-listing (items)
+            // Try to find .c-blog-listing in siblings
+            let container = heading.parentElement?.querySelector('.c-blog-listing');
+            if (!container) {
+                // Fallback: iterate siblings up to 8 to find the content container
+                let sib = heading.nextElementSibling;
+                for (let i = 0; i < 8 && sib; i++) {
+                    if (sib.classList?.contains('c-blog-listing') || sib.classList?.contains('manga_content') || sib.querySelector('.page-item-detail')) {
+                        container = sib;
+                        break;
+                    }
+                    sib = sib.nextElementSibling;
+                }
+            }
+            if (!container) container = heading.closest('.c-blog')?.querySelector('.c-blog-listing');
+            if (!container) container = heading.parentElement;
             if (!container) return;
             const blockItems = [];
-            Array.from(container.querySelectorAll('.page-item-detail, .c-tabs-item__content, .row .page-item-detail, .swiper-slide')).forEach(el => {
+            Array.from(container.querySelectorAll('.page-item-detail, .c-tabs-item__content, .swiper-slide')).forEach(el => {
                 if (blockItems.length >= 20) return;
                 const linkEl = el.querySelector('a[href]');
                 const titleEl = el.querySelector('.post-title a, h3 a, h4 a, h5 a, .title a');
                 const imgEl = el.querySelector('img');
                 const title = titleEl?.textContent.trim() || linkEl?.getAttribute('title') || imgEl?.getAttribute('alt');
                 let url = titleEl?.getAttribute('href') || linkEl?.getAttribute('href');
-                if (url && !url.match(/\/\d+-[\w-]+\.html/) && !url.includes('/anime/') && !url.includes('/anime-') && !url.includes('/manga/') && !url.includes('/series/')) url = undefined;
+                if (!isValidAnimeUrl(url)) url = undefined;
                 const posterUrl = fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src'));
                 if (title && url && title.length > 2 && !seenUrls.has(url)) {
                     seenUrls.add(url);
@@ -565,7 +612,7 @@ async function getHome(cb) {
             if (blockItems.length > 0) results[sectionTitle] = blockItems;
         });
 
-        // ── 4. Fallback: Derniers Ajouts from generic anime links ──
+        // ── 4. Fallback: Derniers Ajouts from remaining anime links ──
         if (Object.keys(results).length < 3) {
             const fallbackItems = [];
             Array.from(doc.querySelectorAll('a[href*="/manga/"], a[href*="/series/"], a[href*="/anime/"], a[href*="/anime-"], a[href*="-manga-"]')).forEach(el => {
@@ -573,7 +620,7 @@ async function getHome(cb) {
                 const title = el.textContent.trim();
                 const url = el.getAttribute('href');
                 if (title && url && title.length > 2 && !seenUrls.has(url)) {
-                    const imgEl = el.querySelector('img') || el.parentElement?.querySelector('img') || el.closest('.page-item-detail, .c-tabs-item__content, .post-title, article, .block_area')?.querySelector('img');
+                    const imgEl = el.querySelector('img') || el.parentElement?.querySelector('img') || el.closest('.page-item-detail, .c-tabs-item__content, .post-title, article')?.querySelector('img');
                     const posterUrl = fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src'));
                     seenUrls.add(url);
                     fallbackItems.push(new MultimediaItem({
@@ -585,21 +632,25 @@ async function getHome(cb) {
             if (fallbackItems.length > 0) results['Derniers Ajouts'] = fallbackItems;
         }
 
-        // ── 5. Content sections by headings ──
+        // ── 5. Content sections by headings (skip if heading is inside a content item) ──
         Array.from(doc.querySelectorAll('h2, h3, h4')).forEach(heading => {
+            // Skip if this heading is inside a content item or section heading
+            if (heading.closest?.('.page-item-detail, .c-tabs-item__content, .post-title, .item-summary, .c-blog__heading, .c-nav-tabs, .block_area-header, .widget-heading')) return;
             const sectionTitle = heading.textContent.trim();
             if (!sectionTitle || sectionTitle.length < 2 || results[sectionTitle]) return;
             let container = heading.nextElementSibling;
             if (!container) container = heading.parentElement;
             if (!container) return;
+            // Skip containers with no actual items (empty divs, navs, etc.)
+            const itemCount = container.querySelectorAll('.page-item-detail, .c-tabs-item__content').length;
+            if (itemCount < 2) return; // Must have at least 2 items to be a section
             const sectionItems = [];
             Array.from(container.querySelectorAll('.post-title a, h3 a, a[href*="/manga/"], a[href*="/anime/"], .page-item-detail, .c-tabs-item__content')).forEach(el => {
                 // If el is a container, extract from inside; if it's a link, use directly
                 const linkEl = el.tagName === 'A' ? el : el.querySelector('a[href]');
                 const title = linkEl?.textContent.trim() || el.querySelector('img')?.getAttribute('alt');
                 let url = linkEl?.getAttribute('href');
-                // Validate URL: skip non-anime links
-                if (url && !url.match(/\/\d+-[\w-]+\.html/) && !url.includes('/anime/') && !url.includes('/anime-') && !url.includes('/manga/') && !url.includes('/series/')) url = undefined;
+                if (!isValidAnimeUrl(url)) url = undefined;
                 const imgEl = el.querySelector('img');
                 const posterUrl = fixUrl(imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src'));
                 if (title && url && title.length > 2 && !seenUrls.has(url)) {
@@ -610,7 +661,7 @@ async function getHome(cb) {
                     }));
                 }
             });
-            if (sectionItems.length > 0) results[sectionTitle] = sectionItems;
+            if (sectionItems.length >= 2) results[sectionTitle] = sectionItems;
         });
 
         cb({ success: true, data: results });
@@ -649,7 +700,7 @@ async function search(query, cb) {
                         const title = titleEl?.textContent.trim() || linkEl?.getAttribute('title') || imgEl?.getAttribute('alt');
                         let url = titleEl?.getAttribute('href') || linkEl?.getAttribute('href');
                         // Validate URL: skip non-anime links
-                        if (url && !url.match(/\/\d+-[\w-]+\.html/) && !url.includes('/anime/') && !url.includes('/anime-') && !url.includes('/manga/') && !url.includes('/series/')) url = undefined;
+                        if (url && !isValidAnimeUrl(url)) url = undefined;
                         if (!title || !url || seenUrls.has(url)) return;
                         seenUrls.add(url);
                         const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src');
@@ -697,7 +748,26 @@ async function search(query, cb) {
             } catch (e) { }
         }
 
-        // ── Strategy 3: POST to admin-ajax.php (Madara AJAX search) ──
+        // ── Strategy 3: GET with page and try /search/ endpoint ──
+        // Note: admin-ajax.php returns 400 (disabled). We skip it and use GET endpoints.
+        if (items.length === 0) {
+            const endpoints = [
+                `${baseUrl}/search/${encodeURIComponent(query)}/`,
+                `${baseUrl}/page-search.html?s=${encodeURIComponent(query)}`
+            ];
+            for (const endpoint of endpoints) {
+                if (items.length > 0) break;
+                try {
+                    const res = await axios.get(endpoint, { headers });
+                    if (res.data && typeof res.data === 'string' && res.data.length > 500) {
+                        const parsed = await parseSearchHtml(res.data);
+                        for (const p of parsed) items.push(p);
+                    }
+                } catch (e) { }
+            }
+        }
+
+        // ── Strategy 4: POST to admin-ajax.php (Madara AJAX search - may return 400) ──
         if (items.length === 0) {
             try {
                 const res = await axios.post(`${baseUrl}/wp-admin/admin-ajax.php`, 
@@ -728,24 +798,6 @@ async function search(query, cb) {
                     }
                 }
             } catch (e) { }
-        }
-
-        // ── Strategy 4: GET with page and try all search endpoints ──
-        if (items.length === 0) {
-            const endpoints = [
-                `${baseUrl}/page-search.html?s=${encodeURIComponent(query)}`,
-                `${baseUrl}/search/${encodeURIComponent(query)}/`
-            ];
-            for (const endpoint of endpoints) {
-                if (items.length > 0) break;
-                try {
-                    const res = await axios.get(endpoint, { headers });
-                    if (res.data && typeof res.data === 'string' && res.data.length > 500) {
-                        const parsed = await parseSearchHtml(res.data);
-                        for (const p of parsed) items.push(p);
-                    }
-                } catch (e) { }
-            }
         }
 
         // Convert to MultimediaItem format
@@ -785,6 +837,21 @@ function detectSeasonAndType(name) {
     }
 
 function fixUrl(p) { if (!p) return ''; if (p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; }
+
+function isValidAnimeUrl(url) {
+    if (!url) return false;
+    // Skip non-content URLs (ads, social, trackers, etc.)
+    if (url.includes('#') || url.includes('javascript:') || url.includes('facebook') || url.includes('twitter') ||
+        url.includes('google') || url.includes('doubleclick') || url.includes('ads') || url.includes('feed/')) return false;
+    // Accept main anime page URLs: /anime/{slug}/
+    // Accept episode URLs: /anime/{slug}/{episode-slug}/
+    if (url.includes('/anime/')) return true;
+    if (url.includes('/manga/')) return true;
+    if (url.includes('/series/')) return true;
+    // Accept old DLE format: /1234-slug.html
+    if (url.match(/\/\d+-[\w-]+\.html/)) return true;
+    return false;
+}
 
 function detectDubStatus(url, title) {
         const text = (url || '') + ' ' + (title || '');
@@ -878,22 +945,56 @@ async function load(url, cb) {
             doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content');
         const posterUrl = fixUrl(rawPoster);
         // Extract metadata: year, genres, status
-        const yearEl = doc.querySelector('.post-content_item .summary-content, .post-status .summary-content');
-        const yearFromEl = yearEl ? parseInt(yearEl.textContent.match(/\d{4}/)?.[0] || '0') : undefined;
-        const yearMatch = html.match(/datePublished["']?\s*:?\s*["']?(\d{4})/i) || 
-            html.match(/Ann[eé]e\s*:?\s*(\d{4})/i) ||
-            html.match(/\b(?:19|20)\d{2}\b/);
-        const year = yearFromEl || (yearMatch ? parseInt(yearMatch[1] || yearMatch[0]) : undefined);
+        // Year: extract from multiple sources, prefer specific ones
+        let year = undefined;
+        // 1. From "Start date" in post-content_item (most reliable - actual anime start year)
+        const startDateItem = Array.from(doc.querySelectorAll('.post-content_item')).find(item => {
+            const heading = item.querySelector('.summary-heading h5, .summary-heading');
+            return heading && /start date|d[eé]but|premi[èe]re|release/i.test(heading.textContent);
+        });
+        if (startDateItem) {
+            const startText = startDateItem.querySelector('.summary-content')?.textContent;
+            const startYear = startText?.match(/\b(\d{4})\b/);
+            if (startYear) year = parseInt(startYear[1]);
+        }
+        // 2. From "Année" label
+        if (!year || year < 1900 || year > 2030) {
+            const anneeMatch = html.match(/Ann[eé]e\s*:?\s*(\d{4})/i);
+            if (anneeMatch) year = parseInt(anneeMatch[1]);
+        }
+        // 3. From JSON-LD datePublished (WordPress publish date, less reliable)
+        if (!year || year < 1900 || year > 2030) {
+            const jsonLdYear = html.match(/"datePublished"\s*:\s*"(\d{4})/i);
+            if (jsonLdYear) year = parseInt(jsonLdYear[1]);
+        }
+        // 4. Generic first 19xx/20xx (fallback with year filter)
+        if (!year || year < 1900 || year > 2030) {
+            const genericMatch = html.match(/\b(?:19|20)\d{2}\b/);
+            if (genericMatch) year = parseInt(genericMatch[0]);
+        }
         // Filter out invalid years
-        const finalYear = (year && year >= 1900 && year <= 2030) ? year : undefined;
-        // Use validated year in all downstream code
-        const displayYear = finalYear;
+        const displayYear = (year && year >= 1900 && year <= 2030) ? year : undefined;
         const genreEls = Array.from(doc.querySelectorAll('.genres-content a, .wp-manga-genre a, .tag-summary a, .summary-content a[href*="genre"], .wp-manga-tags a, [itemprop="genre"], .manga-category a')).map(el => el.textContent.trim()).filter(Boolean);
         // Status: try multiple selectors then regex fallback
-        let status = doc.querySelector('.post-status .summary-content, .post-status .genres-content, .status .summary-content')?.textContent?.trim()?.toLowerCase();
+        // Madara stores status in .post-content_item with heading "Status" → .summary-content
+        let status = doc.querySelector('.post-content_item .summary-content')?.textContent?.trim()?.toLowerCase();
+        // Make sure we got the actual status, not another summary field
+        // Check if the parent heading contains "Status" or if the value looks like a status
+        if (status && !/termin|complet|fini|ended|finished|cours|airing|ongoing|en cours/i.test(status)) {
+            // Try more specific: find post-content_item whose heading says "Status"
+            const statusItem = Array.from(doc.querySelectorAll('.post-content_item')).find(item => {
+                const heading = item.querySelector('.summary-heading h5, .summary-heading');
+                return heading && /status|statut/i.test(heading.textContent);
+            });
+            status = statusItem?.querySelector('.summary-content')?.textContent?.trim()?.toLowerCase();
+        }
         if (!status) {
-            const statusMatch = html.match(/Statut\s*:?\s*([^<]+)/i) || 
-                html.match(/Status\s*:?\s*([^<]+)/i) ||
+            status = doc.querySelector('.post-status .summary-content, .post-status .genres-content, .status .summary-content')?.textContent?.trim()?.toLowerCase();
+        }
+        if (!status) {
+            const statusMatch = html.match(/<h5>\s*(?:Statut|Status)\s*<\/h5>[\s\S]*?<div[^>]*class="summary-content"[^>]*>\s*([^<]+)\s*</i) ||
+                html.match(/Statut\s*:?\s*<[^>]+>\s*([^<]+)/i) ||
+                html.match(/Status\s*:?\s*<[^>]+>\s*([^<]+)/i) ||
                 html.match(/\b(En cours|Termin[ée]|Finished|Ongoing|Completed|Airing)\b/i);
             if (statusMatch) status = statusMatch[1]?.trim().toLowerCase() || statusMatch[0].toLowerCase();
         }
@@ -1144,7 +1245,7 @@ async function loadStreams(url, cb) {
         }
 
         // ── Strategy 1: Iframe extraction with trembed/tremor support ──
-        // Collect all iframes from page, resolve trembed URLs, process in parallel
+        // Collect all iframes from HTML <iframe> tags + thisChapterSources JS variable
         const iframeRegex = /<iframe[^>]*src=["']([^"']+)["'][^>]*>/gi;
         const embedUrls = [];
         let iframeMatch;
@@ -1153,6 +1254,24 @@ async function loadStreams(url, cb) {
             if (embedUrl && !embedUrl.includes('ads') && !embedUrl.includes('google') && !embedUrl.includes('facebook') && !embedUrl.includes('doubleclick')) {
                 embedUrls.push(embedUrl);
             }
+        }
+        // Also parse thisChapterSources/theChapterSources for ALL player options (hidden in JS object)
+        // These contain up to 5 players (vidmoly, voe, streamtape, etc.) of which only 1 is visible
+        const chapterSourcesMatch = html.match(/(?:var|let|const|window\.)?\s*(?:thisChapterSources|theChapterSources)\s*=\s*(\{[\s\S]*?\});?/i);
+        if (chapterSourcesMatch) {
+            try {
+                // Unescape JSON: replace \\/ with / and extract all iframe src URLs
+                const sourcesStr = chapterSourcesMatch[1].replace(/\\\//g, '/').replace(/\\"/g, '"');
+                const sourceIframeRegex = /<iframe[^>]*src=["']([^"']+)["'][^>]*>/gi;
+                let srcMatch;
+                while ((srcMatch = sourceIframeRegex.exec(sourcesStr)) !== null) {
+                    const extraUrl = srcMatch[1];
+                    if (extraUrl && !embedUrls.includes(extraUrl) && !extraUrl.includes('ads') && !extraUrl.includes('google')) {
+                        embedUrls.push(extraUrl);
+                        log('Found extra player: ' + extraUrl);
+                    }
+                }
+            } catch (e) { log('Failed to parse chapter sources', e); }
         }
         // Resolve all embed URLs in parallel for speed
         if (embedUrls.length > 0) {
@@ -1258,6 +1377,21 @@ async function loadStreams(url, cb) {
                 if (streams.length >= 5) break;
                 await tryAddStream(plMatch[1], 'Playlist');
             }
+        }
+
+        // ── Strategy 5: MAGIC_PROXY_v1 fallback — page is SSR with dynamic JS-loaded video ──
+        // The episode page HTML contains NO iframes or video elements (loaded dynamically by Madara JS).
+        // MAGIC_PROXY_v1 lets SkyStream execute the page JS and intercept XHR/Fetch calls
+        // to admin-ajax.php (e.g. manga_get_chapter), capturing the response HTML with iframes.
+        if (streams.length === 0) {
+            const proxyUrl = "MAGIC_PROXY_v1" + encodeBase64(url);
+            streams.push(new StreamResult({
+                url: proxyUrl,
+                quality: 'Auto',
+                source: 'VoirAnime',
+                headers: { 'Referer': baseUrl }
+            }));
+            log('MAGIC_PROXY_v1 fallback for: ' + url);
         }
 
         cb({ success: true, data: streams });
