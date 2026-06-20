@@ -2,7 +2,7 @@
   {
     "packageName": "com.gowaru.kaisen.animesama",
     "name": "Anime-Sama",
-    "version": 4,
+    "version": 5,
     "baseUrl": "https://anime-sama.to",
     "description": "Anime-Sama - Streaming anime VF & VOSTFR",
     "authors": [
@@ -29,7 +29,7 @@
   {
     "packageName": "com.gowaru.kaisen.animesultra",
     "name": "AnimesUltra",
-    "version": 7,
+    "version": 8,
     "baseUrl": "https://ww.animesultra.org",
     "domains": [
       {
@@ -56,7 +56,7 @@
   {
     "packageName": "com.gowaru.kaisen.animevostfr",
     "name": "AnimeVOSTFR",
-    "version": 6,
+    "version": 7,
     "baseUrl": "https://animevostfr.org/",
     "description": "AnimeVOSTFR - Streaming anime VOSTFR",
     "authors": [
@@ -73,7 +73,7 @@
   {
     "packageName": "com.gowaru.kaisen.frenchanime",
     "name": "French-Anime",
-    "version": 7,
+    "version": 8,
     "baseUrl": "https://french-anime.com",
     "domains": [
       {
@@ -100,7 +100,7 @@
   {
     "packageName": "com.gowaru.kaisen.sekai",
     "name": "Sekai",
-    "version": 3,
+    "version": 4,
     "baseUrl": "https://sekai.one",
     "description": "Sekai - Streaming anime VF & VOSTFR",
     "authors": [
@@ -117,7 +117,7 @@
   {
     "packageName": "com.gowaru.kaisen.voiranime",
     "name": "VoirAnime",
-    "version": 4,
+    "version": 5,
     "baseUrl": "https://voir-anime.to",
     "description": "VoirAnime - Streaming anime VF & VOSTFR",
     "authors": [
@@ -134,7 +134,7 @@
   {
     "packageName": "com.gowaru.kaisen.vostfree",
     "name": "Vostfree",
-    "version": 4,
+    "version": 5,
     "baseUrl": "https://vostfree.ws",
     "description": "Vostfree - Animes VF et VOSTFR en streaming",
     "authors": [
