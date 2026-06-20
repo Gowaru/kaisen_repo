@@ -1,28 +1,6 @@
 // @ts-nocheck
 import { MixDrop, StreamTape, Voe, Filemoon, DoodExtractor, HubCloud } from 'skystream-extractors/dist/index.js';
-import { getPlayerUrl } from '../shared.js';
-
-function encodeBase64(str) {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-    let output = "";
-    let i = 0;
-    str = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function (match, p1) {
-        return String.fromCharCode('0x' + p1);
-    });
-    while (i < str.length) {
-        let chr1 = str.charCodeAt(i++);
-        let chr2 = i < str.length ? str.charCodeAt(i++) : Number.NaN;
-        let chr3 = i < str.length ? str.charCodeAt(i++) : Number.NaN;
-        let enc1 = chr1 >> 2;
-        let enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
-        let enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
-        let enc4 = chr3 & 63;
-        if (isNaN(chr2)) enc3 = enc4 = 64;
-        else if (isNaN(chr3)) enc4 = 64;
-        output += chars.charAt(enc1) + chars.charAt(enc2) + chars.charAt(enc3) + chars.charAt(enc4);
-    }
-    return output;
-}
+import { getPlayerUrl, encodeBase64, createFixUrl, detectDubStatus, parseSeasonInfo } from '../shared.js';
 
 const axios = {
     get: async (url, config = {}) => {
@@ -89,7 +67,7 @@ const headers = {
     'Origin': baseUrl
 };
 
-function fixUrl(p) { if (!p) return ''; if (p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; }
+const fixUrl = createFixUrl(baseUrl);
 
 const PluginExtractors = {
 
@@ -1156,42 +1134,6 @@ async function search(query, cb) {
 // Parse season info from a SEASON title (not episode title)
 // e.g. "Saison 1" → { season: 1 }, "Film" → { contentType: 'Film' }, "OAV 2" → { season: 2, contentType: 'OAV' }
 // Strips VF/VOSTFR labels before parsing to avoid interference with detection
-function parseSeasonInfo(title) {
-    let season = undefined;
-    let contentType = undefined;
-    if (!title) return { season, contentType };
-    // Strip dub status labels that some sites append to season titles
-    let t = title.trim().replace(/\s*[\[(]?(?:VF|VOSTFR|VOST|VO|DUB|SUB)[\])]?\s*/gi, ' ').replace(/\s+/g, ' ').trim();
-    if (!t) return { season, contentType };
-    // Detect content type: OAV/OVA/ONA, Film, Spécial
-    if (/\b(?:oav|ova|ona)\b/i.test(t)) contentType = 'OAV';
-    else if (/\b(?:film|movie|film\s*anim[ée])\b/i.test(t)) contentType = 'Film';
-    else if (/\b(?:sp[ée]cial|special)\b/i.test(t)) contentType = 'Spécial';
-    // Extract season number from known patterns with word boundaries
-    // Patterns: "Saison 1", "Season 2", "Part 3", "Cour 4", "S 5", "Film 2", "OAV 3"
-    // Also catches trailing numbers like "Saison 2 VF" → "Saison 2" → season=2
-    const sMatch = t.match(/(?:\b(?:saison|season|part|cour|film|oav|ova|ona|sp[ée]cial|special|episode|ep|volume|vol|tome)\s+|\bS\s*)(\d+)\b/i);
-    if (sMatch) season = parseInt(sMatch[1]);
-    // If no explicit season keyword but a lone number exists (e.g. title is just "1" or "Saison 1er")
-    if (season === undefined) {
-        const numMatch = t.match(/\d+/);
-        if (numMatch) {
-            const num = parseInt(numMatch[0]);
-            // Only assign season number if no content type was detected (to avoid "Film" getting season=1)
-            // OR if content type was already paired with a number (e.g. "Film 2" already captured above)
-            if (!contentType) season = num;
-        }
-    }
-    return { season, contentType };
-}
-
-function detectDubStatus(url, title) {
-        const text = (url || '') + ' ' + (title || '');
-        if (/\/vf\b|\(VF\)|-vf$/i.test(text)) return 'dub';
-        if (/\/vostfr\b|\(VOSTFR\)|-vostfr$/i.test(text)) return 'sub';
-        return 'none';
-    }
-
 // Determine dubStatus from the page URL (VF or VOSTFR)
 function getDubStatusFromPageUrl(pageUrl) {
         if (/\/anime-vf\b|[-_]vf(?!o)/i.test(pageUrl)) return 'dub';

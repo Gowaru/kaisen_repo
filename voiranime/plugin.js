@@ -1,27 +1,6 @@
 // @ts-nocheck
 import { MixDrop, StreamTape, Voe, Filemoon, DoodExtractor, HubCloud } from 'skystream-extractors/dist/index.js';
-
-function encodeBase64(str) {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-    let output = "";
-    let i = 0;
-    str = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function (match, p1) {
-        return String.fromCharCode('0x' + p1);
-    });
-    while (i < str.length) {
-        let chr1 = str.charCodeAt(i++);
-        let chr2 = i < str.length ? str.charCodeAt(i++) : Number.NaN;
-        let chr3 = i < str.length ? str.charCodeAt(i++) : Number.NaN;
-        let enc1 = chr1 >> 2;
-        let enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
-        let enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
-        let enc4 = chr3 & 63;
-        if (isNaN(chr2)) enc3 = enc4 = 64;
-        else if (isNaN(chr3)) enc4 = 64;
-        output += chars.charAt(enc1) + chars.charAt(enc2) + chars.charAt(enc3) + chars.charAt(enc4);
-    }
-    return output;
-}
+import { encodeBase64, createFixUrl, detectDubStatus } from '../shared.js';
 
 const axios = {
     get: async (url, config = {}) => {
@@ -836,7 +815,7 @@ function detectSeasonAndType(name) {
         return { season, contentType };
     }
 
-function fixUrl(p) { if (!p) return ''; if (p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; }
+const fixUrl = createFixUrl(baseUrl);
 
 function isValidAnimeUrl(url) {
     if (!url) return false;
@@ -852,13 +831,6 @@ function isValidAnimeUrl(url) {
     if (url.match(/\/\d+-[\w-]+\.html/)) return true;
     return false;
 }
-
-function detectDubStatus(url, title) {
-        const text = (url || '') + ' ' + (title || '');
-        if (/\/vf\b|\(VF\)|-vf$/i.test(text)) return 'dub';
-        if (/\/vostfr\b|\(VOSTFR\)|-vostfr$/i.test(text)) return 'sub';
-        return 'none';
-    }
 
 // Extract episode number from title more reliably
 // Prioritizes patterns like "Episode 3", "Épisode 12", "E04" over generic first number

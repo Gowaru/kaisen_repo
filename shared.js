@@ -1,3 +1,68 @@
+// ── Base64 encoding (tries native btoa first, then manual polyfill) ──
+export function encodeBase64(str) {
+    try {
+        if (typeof btoa === 'function') return btoa(str);
+    } catch (e) { }
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+    let output = "";
+    let i = 0;
+    str = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function (match, p1) {
+        return String.fromCharCode(parseInt(p1, 16));
+    });
+    while (i < str.length) {
+        let chr1 = str.charCodeAt(i++);
+        let chr2 = i < str.length ? str.charCodeAt(i++) : Number.NaN;
+        let chr3 = i < str.length ? str.charCodeAt(i++) : Number.NaN;
+        let enc1 = chr1 >> 2;
+        let enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+        let enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
+        let enc4 = chr3 & 63;
+        if (isNaN(chr2)) enc3 = enc4 = 64;
+        else if (isNaN(chr3)) enc4 = 64;
+        output += chars.charAt(enc1) + chars.charAt(enc2) + chars.charAt(enc3) + chars.charAt(enc4);
+    }
+    return output;
+}
+
+// ── Create a fixUrl function bound to a specific baseUrl ──
+export function createFixUrl(baseUrl) {
+    return function fixUrl(p) {
+        if (!p) return '';
+        if (p.startsWith('http')) return p;
+        return baseUrl + (p.startsWith('/') ? '' : '/') + p;
+    };
+}
+
+// ── Detect dubbing status from URL/title text ──
+export function detectDubStatus(url, title) {
+    const text = (url || '') + ' ' + (title || '');
+    if (/\/vf\b|\(VF\)|-vf$/i.test(text)) return 'dub';
+    if (/\/vostfr\b|\(VOSTFR\)|-vostfr$/i.test(text)) return 'sub';
+    return 'none';
+}
+
+// ── Parse season info from a season title (e.g. "Saison 1", "Film", "OAV 2") ──
+export function parseSeasonInfo(title) {
+    let season = undefined;
+    let contentType = undefined;
+    if (!title) return { season, contentType };
+    let t = title.trim().replace(/\s*[\[(]?(?:VF|VOSTFR|VOST|VO|DUB|SUB)[\])]?\s*/gi, ' ').replace(/\s+/g, ' ').trim();
+    if (!t) return { season, contentType };
+    if (/\b(?:oav|ova|ona)\b/i.test(t)) contentType = 'OAV';
+    else if (/\b(?:film|movie|film\s*anim[ée])\b/i.test(t)) contentType = 'Film';
+    else if (/\b(?:sp[ée]cial|special)\b/i.test(t)) contentType = 'Spécial';
+    const sMatch = t.match(/(?:\b(?:saison|season|part|cour|film|oav|ova|ona|sp[ée]cial|special|episode|ep|volume|vol|tome)\s+|\bS\s*)(\d+)\b/i);
+    if (sMatch) season = parseInt(sMatch[1]);
+    if (season === undefined) {
+        const numMatch = t.match(/\d+/);
+        if (numMatch) {
+            const num = parseInt(numMatch[0]);
+            if (!contentType) season = num;
+        }
+    }
+    return { season, contentType };
+}
+
 // ── Centralized host URL construction from content_player_X values ──
 // Converts a raw content value + button number to a full player URL.
 // btnNum mapping:

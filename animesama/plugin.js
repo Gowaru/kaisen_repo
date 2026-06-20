@@ -1,30 +1,7 @@
 // @ts-nocheck
 import { MixDrop, StreamTape, Voe, Filemoon, DoodExtractor, HubCloud } from 'skystream-extractors/dist/index.js';
 
-function encodeBase64(str) {
-    try {
-        if (typeof btoa === 'function') return btoa(str);
-    } catch (e) { }
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-    let output = "";
-    let i = 0;
-    str = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function (match, p1) {
-        return String.fromCharCode(parseInt(p1, 16));
-    });
-    while (i < str.length) {
-        let chr1 = str.charCodeAt(i++);
-        let chr2 = i < str.length ? str.charCodeAt(i++) : Number.NaN;
-        let chr3 = i < str.length ? str.charCodeAt(i++) : Number.NaN;
-        let enc1 = chr1 >> 2;
-        let enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
-        let enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
-        let enc4 = chr3 & 63;
-        if (isNaN(chr2)) enc3 = enc4 = 64;
-        else if (isNaN(chr3)) enc4 = 64;
-        output += chars.charAt(enc1) + chars.charAt(enc2) + chars.charAt(enc3) + chars.charAt(enc4);
-    }
-    return output;
-}
+import { encodeBase64, parseSeasonInfo } from '../shared.js';
 
 const PLUGIN_ID = 'animesama';
 function log(msg, data) { try { console.log(`[${PLUGIN_ID}] ${msg}`, data || ''); } catch (_) { } }
@@ -1181,27 +1158,6 @@ async function load(url, cb) {
             if (/en\s*cours/i.test(raw)) status = 'ongoing';
             else if (/termin|fini|complet/i.test(raw)) status = 'completed';
             else status = raw;
-        }
-
-        // ── Parse season info from titles like animesultra ──
-        // e.g. "Saison 1" → { season: 1 }, "Film" → { contentType: 'Film' }, "OAV" → { contentType: 'OAV' }
-        function parseSeasonInfo(title) {
-            let season = undefined;
-            let contentType = undefined;
-            if (!title) return { season, contentType };
-            const t = title.trim();
-            // Detect content type
-            if (/\b(?:oav|ova|ona)\b/i.test(t)) contentType = 'OAV';
-            else if (/\bfilm\b/i.test(t)) contentType = 'Film';
-            else if (/\b(?:special|spécial)\b/i.test(t)) contentType = 'Spécial';
-            // Extract season number
-            const sMatch = t.match(/(?:saison|season|part|cour|s|film|oav|ova|ona|special|sp[ée]cial)\s*(\d+)/i);
-            if (sMatch) season = parseInt(sMatch[1]);
-            if (season === undefined) {
-                const numMatch = t.match(/\d+/);
-                if (numMatch && !contentType) season = parseInt(numMatch[0]);
-            }
-            return { season, contentType };
         }
 
         // ── Parse season entries grouped by TITLE (unlike old code that treated VF/VOSTFR as separate) ──

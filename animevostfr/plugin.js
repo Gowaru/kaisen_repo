@@ -1,27 +1,6 @@
 // @ts-nocheck
 import { MixDrop, StreamTape, Voe, Filemoon, DoodExtractor, HubCloud } from 'skystream-extractors/dist/index.js';
-
-function encodeBase64(str) {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-    let output = "";
-    let i = 0;
-    str = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function (match, p1) {
-        return String.fromCharCode('0x' + p1);
-    });
-    while (i < str.length) {
-        let chr1 = str.charCodeAt(i++);
-        let chr2 = i < str.length ? str.charCodeAt(i++) : Number.NaN;
-        let chr3 = i < str.length ? str.charCodeAt(i++) : Number.NaN;
-        let enc1 = chr1 >> 2;
-        let enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
-        let enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
-        let enc4 = chr3 & 63;
-        if (isNaN(chr2)) enc3 = enc4 = 64;
-        else if (isNaN(chr3)) enc4 = 64;
-        output += chars.charAt(enc1) + chars.charAt(enc2) + chars.charAt(enc3) + chars.charAt(enc4);
-    }
-    return output;
-}
+import { encodeBase64, createFixUrl, detectDubStatus, parseSeasonInfo } from '../shared.js';
 
 const axios = {
     get: async (url, config = {}) => {
@@ -632,6 +611,8 @@ const Extractors = {
     }
 };
 
+const fixUrl = createFixUrl(baseUrl);
+
 // ── Helper: validate an anime URL (accepts /animes/slug/, /animes/1234-slug, /saison/, /film/) ──
 function isValidAnimeUrl(url) {
     if (!url) return false;
@@ -646,8 +627,6 @@ async function getHome(cb) {
         const results = {};
         const queryAll = (d, s) => Array.from(d.querySelectorAll(s));
         const seenUrls = new Set();
-        const fixUrl = p => { if (!p) return ''; if (p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; };
-
         // Helper to extract poster from an element
         const getPoster = el => {
             const imgEl = el.querySelector('img');
@@ -819,8 +798,6 @@ async function search(query, cb) {
     try {
         const items = [];
         const seenUrls = new Set();
-        const fixUrl = p => { if (!p) return ''; if (p.startsWith('http')) return p; return baseUrl + (p.startsWith('/') ? '' : '/') + p; };
-
         // ── Helper: extract item from a Toroplay4 result element ──
         function extractSearchItem(el) {
             // Get URL from the first anchor
@@ -991,13 +968,6 @@ function detectSeasonAndType(name) {
     return { season, contentType };
 }
 
-function detectDubStatus(url, title) {
-    const text = (url || '') + ' ' + (title || '');
-    if (/\/vf\b|\(VF\)|-vf$/i.test(text)) return 'dub';
-    if (/\/vostfr\b|\(VOSTFR\)|-vostfr$/i.test(text)) return 'sub';
-    return 'none';
-}
-
 // Detect dubStatus from section heading context (e.g. "Episodes VOSTFR :", "Episodes VF :")
 function detectDubStatusFromHeading(el) {
     let node = el;
@@ -1015,27 +985,6 @@ function detectDubStatusFromHeading(el) {
 }
 
 // Parse season info from a SEASON title (not episode title)
-function parseSeasonInfo(title) {
-    let season = undefined;
-    let contentType = undefined;
-    if (!title) return { season, contentType };
-    let t = title.trim().replace(/\s*[\[(]?(?:VF|VOSTFR|VOST|VO|DUB|SUB)[\])]?\s*/gi, ' ').replace(/\s+/g, ' ').trim();
-    if (!t) return { season, contentType };
-    if (/\b(?:oav|ova|ona)\b/i.test(t)) contentType = 'OAV';
-    else if (/\b(?:film|movie|film\s*anim[ée])\b/i.test(t)) contentType = 'Film';
-    else if (/\b(?:sp[ée]cial|special)\b/i.test(t)) contentType = 'Spécial';
-    const sMatch = t.match(/(?:\b(?:saison|season|part|cour|film|oav|ova|ona|sp[ée]cial|special|episode|ep|volume|vol|tome)\s+|\bS\s*)(\d+)\b/i);
-    if (sMatch) season = parseInt(sMatch[1]);
-    if (season === undefined) {
-        const numMatch = t.match(/\d+/);
-        if (numMatch) {
-            const num = parseInt(numMatch[0]);
-            if (!contentType) season = num;
-        }
-    }
-    return { season, contentType };
-}
-
 // Determine dubStatus from the page URL (VF or VOSTFR)
 function getDubStatusFromPageUrl(pageUrl) {
     if (/\/vf\b|[-_]vf(?!o)/i.test(pageUrl)) return 'dub';
