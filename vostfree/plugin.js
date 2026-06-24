@@ -494,26 +494,54 @@ async function getHome(cb) {
         const results = {};
         const seenUrls = new Set();
 
-        // ── 1. À la Une (slider-poster) ──
-        const featured = [];
-        Array.from(doc.querySelectorAll('.slider-poster')).forEach(el => {
-            const linkEl = el.querySelector('a');
+        // ── 1. Hero slider (swiper, slider-poster, featured sections) ──
+        const heroItems = [];
+        const heroSelectors = [
+            // Swiper slides first (as requested)
+            '.swiper-slide',
+            // DLE slider-poster (existing)
+            '.slider-poster',
+            // DLE carousel/hero patterns
+            '.carou-hero .item',
+            '.deslide-wrap .deslide-item',
+            '.block_area_hero .mov.clearfix, .block_area_hero .mov',
+            // Generic featured/hero containers
+            '[class*="slider"] [class*="item"], [class*="hero"] [class*="item"]',
+            '.featured-item, .hero-item',
+            '.slide-item',
+            // Fallback: any large featured image
+            '.main-featured .item',
+        ];
+
+        function extractHeroItem(el) {
+            const linkEl = el.querySelector('a[href]');
             const imgEl = el.querySelector('img');
-            const title = imgEl?.getAttribute('alt') || linkEl?.getAttribute('title') || linkEl?.textContent.trim();
+            const titleEl = el.querySelector('.title, .title1, .title0, .alt, .slider-title, h3, h4, .info a, .slide-info a');
+            const title = titleEl?.textContent.trim() || imgEl?.getAttribute('alt') || linkEl?.getAttribute('title') || '';
             let url = linkEl?.getAttribute('href');
             // DLE format: /{ID}-{slug}.html — only accept this format for DLE sites
             if (url && !url.match(/\/\d+-[\w-]+\.html/)) url = undefined;
             const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
-            if (title && url && !seenUrls.has(url)) {
-                seenUrls.add(url);
-                featured.push(new MultimediaItem({
-                    title,
-                    url: url.startsWith('http') ? url : baseUrl + url,
-                    posterUrl: fixUrl(posterUrl), type: 'anime'
-                }));
-            }
-        });
-        if (featured.length > 0) results['À la Une'] = featured;
+            return { title, url, posterUrl };
+        }
+
+        for (const sel of heroSelectors) {
+            if (heroItems.length > 0) break;
+            Array.from(doc.querySelectorAll(sel)).forEach(el => {
+                if (heroItems.length >= 12) return;
+                const { title, url, posterUrl } = extractHeroItem(el);
+                if (title && url && !seenUrls.has(url)) {
+                    seenUrls.add(url);
+                    heroItems.push(new MultimediaItem({
+                        title,
+                        url: url.startsWith('http') ? url : baseUrl + url,
+                        posterUrl: fixUrl(posterUrl),
+                        type: 'anime'
+                    }));
+                }
+            });
+        }
+        if (heroItems.length > 0) results['À la Une'] = heroItems;
 
         // ── 2. Nouvelles Séries (new-series-slider) ──
         const newSeries = [];
@@ -694,6 +722,60 @@ function findAlternativeVostfreeUrl(url) {
     const altUrl = url.replace(`/${id}-`, `/${altId}-`);
     if (altUrl === url) return null;
     return { altUrl, currentIsVf: isVf, altId };
+}
+
+// Find alternative VF/VOSTFR version from the page HTML (pattern complet)
+// Détecte la version actuelle depuis l'URL, cherche des liens dans le HTML,
+// et fallback sur le DLE ID pairing
+function findAlternativeVersionFromPage(html, currentUrl) {
+    const lowerUrl = currentUrl.toLowerCase();
+    let currentVersion = null;
+
+    // 1. Detect current version from URL
+    if (/\/vostfr|[-_]vostfr|\bvostfr\b/i.test(lowerUrl)) currentVersion = 'VOSTFR';
+    else if (/[-_]vf(?!o)|\bvf\b(?!o)/i.test(lowerUrl)) currentVersion = 'VF';
+
+    // If not detected from URL, use DLE ID pairing
+    if (!currentVersion) {
+        const idMatch = currentUrl.match(/\/(\d+)-/);
+        if (!idMatch) return { currentVersion: null, alternativeUrl: null };
+        const id = parseInt(idMatch[1]);
+        currentVersion = id % 2 === 0 ? 'VF' : 'VOSTFR';
+    }
+
+    const altPath = currentVersion === 'VOSTFR' ? 'vf' : 'vostfr';
+    let alternativeUrl = null;
+
+    // 2. Try to find language switcher links in HTML
+    // DLE sites often have language toggles in <a> tags or <select> options
+    const langPatterns = [
+        // <a href="..."> with class containing flag/lang/switch/change
+        new RegExp('href=["\']([^"\']*' + altPath + '[^"\']*)["\'][^>]*class=["\'][^"\']*(?:flag|lang|switch|change|active|version)[^"\']*["\']', 'gi'),
+        // <a href="..."> with text containing VF/VOSTFR
+        new RegExp('<a[^>]+href=["\']([^"\']+(?:' + altPath + ')[^"\']*)["\'][^>]*>[^<]*' + (currentVersion === 'VOSTFR' ? 'VF' : 'VOSTFR') + '[^<]*<\/a>', 'gi'),
+        // <option value="..."> containing the opposite language
+        new RegExp('value=["\']([^"\']*' + altPath + '[^"\']*)["\']', 'gi'),
+    ];
+    for (const regex of langPatterns) {
+        if (alternativeUrl) break;
+        const m = regex.exec(html);
+        if (m && m[1]) {
+            const foundUrl = m[1].startsWith('http') ? m[1] : baseUrl + (m[1].startsWith('/') ? '' : '/') + m[1];
+            if (foundUrl !== currentUrl) {
+                alternativeUrl = foundUrl;
+            }
+        }
+    }
+
+    // 3. Fallback: DLE ID pairing (even=VF, odd=VOSTFR)
+    if (!alternativeUrl) {
+        const altInfo = findAlternativeVostfreeUrl(currentUrl);
+        if (altInfo && altInfo.altUrl !== currentUrl) {
+            alternativeUrl = altInfo.altUrl;
+        }
+    }
+
+    return { currentVersion, alternativeUrl };
 }
 
 // ── Sitemap fallback: find alternative anime URL from sitemap.xml ──
@@ -898,15 +980,14 @@ async function load(url, cb) {
             }
         }
 
-        // ── Alternative VF/VOSTFR version via DLE ID pairing ──
-        // VF uses even IDs, VOSTFR uses odd IDs (e.g., 1346→VF, 1347→VOSTFR)
-        const altInfo = findAlternativeVostfreeUrl(url);
-        if (altInfo) {
-            const currentDubStatus = detectDubStatus(url, title);
-            const altDubStatus = currentDubStatus === 'dub' ? 'sub' : (currentDubStatus === 'sub' ? 'dub' : 'none');
+        // ── Alternative VF/VOSTFR version via findAlternativeVersionFromPage ──
+        // Detecte la version alternative depuis le HTML (patterns de langue) ou via DLE ID pairing
+        const { currentVersion, alternativeUrl } = findAlternativeVersionFromPage(html, url);
+        if (alternativeUrl && alternativeUrl !== url) {
+            const altDubStatus = currentVersion === 'VF' ? 'sub' : 'dub';
             if (altDubStatus !== 'none') {
                 try {
-                    const altRes = await axios.get(altInfo.altUrl, { headers });
+                    const altRes = await axios.get(alternativeUrl, { headers });
                     if (altRes.status === 200 && typeof altRes.data === 'string' && altRes.data.length > 500) {
                         const altHtml = altRes.data;
                         const seenEpUrls = new Set(episodes.map(e => e.url));
@@ -936,10 +1017,10 @@ async function load(url, cb) {
                             }
                         }
                         if (altEpCount > 0) {
-                            log(`Alternative version loaded: ${altInfo.altUrl} (${altEpCount} episodes)`);
+                            log(`Alternative version loaded: ${alternativeUrl} (${altEpCount} episodes)`);
                         }
                     }
-                } catch (e) { log('Alternative version not available: ' + altInfo.altUrl, e); }
+                } catch (e) { log('Alternative version not available: ' + alternativeUrl, e); }
             }
         }
 
@@ -961,6 +1042,60 @@ async function load(url, cb) {
                 }));
             }
         });
+
+        // ── Strategy 2: Heading-based recommendation sections (fallback) ──
+        if (recommendations.length === 0) {
+            const recSeen = new Set();
+            const headingKeywords = /recommand|recommend|similaire|related|suggestion|vous aimerez|autre|also like|popular|tendance|top|similaires?|du m[êe]me genre|semblable|apparent[eé]?/i;
+            doc.querySelectorAll('h2, h3, h4').forEach(heading => {
+                if (recommendations.length >= 15) return;
+                const headingText = heading.textContent.trim();
+                if (!headingText || !headingKeywords.test(headingText)) return;
+                let container = heading.nextElementSibling;
+                if (!container) container = heading.parentElement;
+                if (!container) return;
+                // Try DLE-specific item selectors
+                const itemSelectors = [
+                    '.slider-poster',
+                    '.movie-small li, .movie-small a',
+                    '.top-vostfr',
+                    '.short-item',
+                    '.news-item',
+                    'li a[href*=".html"]',
+                    'a[href]',
+                ];
+                let found = false;
+                for (const sel of itemSelectors) {
+                    if (recommendations.length >= 15) break;
+                    const items = container.querySelectorAll(sel);
+                    if (items.length === 0) continue;
+                    items.forEach(el => {
+                        if (recommendations.length >= 15) return;
+                        const linkEl = el.querySelector ? el.querySelector('a[href]') : (el.tagName === 'A' ? el : null);
+                        const imgEl = el.querySelector ? el.querySelector('img') : null;
+                        const title = el.querySelector('.title, .alt, .slider-title, .info a, h3, h4')?.textContent.trim() ||
+                            imgEl?.getAttribute('alt') ||
+                            linkEl?.getAttribute('title') ||
+                            (linkEl?.textContent ? linkEl.textContent.trim() : '');
+                        let url = linkEl?.getAttribute('href');
+                        // DLE format: /{ID}-{slug}.html
+                        if (url && !url.match(/\/\d+-[\w-]+\.html/)) url = undefined;
+                        const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src');
+                        if (title && url && title.length > 1 && !url.includes('#') && !recSeen.has(url)) {
+                            recSeen.add(url);
+                            recommendations.push(new MultimediaItem({
+                                title,
+                                url: url.startsWith('http') ? url : baseUrl + url,
+                                posterUrl: posterUrl ? fixUrl(posterUrl) : '',
+                                type: 'anime'
+                            }));
+                            found = true;
+                        }
+                    });
+                    if (found) break;
+                }
+            });
+        }
 
         cb({ success: true, data: new MultimediaItem({ type: "anime", title, description, posterUrl, episodes, year, score, status, genres: genreEls.length > 0 ? genreEls : undefined, recommendations: recommendations.length > 0 ? recommendations : undefined }) });
     } catch (e) { log('load error: ' + url, e); cb({ success: false, errorCode: 'LOAD_ERROR', message: String(e) }); }

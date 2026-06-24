@@ -497,7 +497,54 @@ async function getHome(cb) {
         const results = {};
         const seenUrls = new Set();
 
-        // ── 1. VF/VOSTFR sections (from page-item-detail) ──
+        // ── 1. Hero slider (swiper, slider, featured sections) ──
+        const heroItems = [];
+        const heroSelectors = [
+            // Swiper slides first
+            '.swiper-slide',
+            // Madara theme sliders
+            '.manga-slider .slider__item',
+            '.popular-slider .slider__item',
+            '.featured-slider .slider__item',
+            // Madara c-blog carousel / featured areas
+            '.c-blog__heading + .c-blog-listing .page-item-detail',
+            // Generic hero/featured containers
+            '[class*="hero"] .page-item-detail',
+            '[class*="featured"] .page-item-detail',
+            '[class*="slider"] .page-item-detail',
+            '[class*="carousel"] .page-item-detail',
+        ];
+
+        function extractHeroItem(el) {
+            const linkEl = el.querySelector('a[href]');
+            const imgEl = el.querySelector('img');
+            const titleEl = el.querySelector('.post-title a, h3 a, h4 a, h5 a, .title a');
+            let title = titleEl?.textContent?.trim() || linkEl?.getAttribute('title') || imgEl?.getAttribute('alt') || '';
+            let url = titleEl?.getAttribute('href') || linkEl?.getAttribute('href');
+            if (url && !isValidAnimeUrl(url)) url = undefined;
+            const posterUrl = imgEl?.getAttribute('data-src') || imgEl?.getAttribute('src') || imgEl?.getAttribute('data-lazy-src');
+            return { title, url, posterUrl };
+        }
+
+        for (const sel of heroSelectors) {
+            if (heroItems.length > 0) break;
+            Array.from(doc.querySelectorAll(sel)).forEach(el => {
+                if (heroItems.length >= 12) return;
+                const { title, url, posterUrl } = extractHeroItem(el);
+                if (title && url && !seenUrls.has(url)) {
+                    seenUrls.add(url);
+                    heroItems.push(new MultimediaItem({
+                        title: title.replace(/\s+/g, ' ').trim(),
+                        url: url.startsWith('http') ? url : baseUrl + url,
+                        posterUrl: fixUrl(posterUrl),
+                        type: 'anime'
+                    }));
+                }
+            });
+        }
+        if (heroItems.length > 0) results['À la Une'] = heroItems;
+
+        // ── 2. VF/VOSTFR sections (from page-item-detail) ──
         // Note: The Madara theme uses ?filter=subbed / ?filter=dubbed query params.
         // On the homepage, VF/VOSTFR is detected from the anime title/URL suffix.
         const vfItems = [];
@@ -1080,6 +1127,45 @@ async function load(url, cb) {
             const lastEp = episodes[episodes.length - 1].episode;
             if (firstEp > lastEp) {
                 episodes.reverse();
+            }
+        }
+
+        // ── Direct stream URL fallback: try extracting direct video URLs from raw HTML ──
+        if (episodes.length === 0) {
+            const streamPatterns = [
+                // Quoted URLs with video extensions
+                /["'](https?:\/\/[^"']+\.(?:mp4|m3u8|mkv|webm)[^"']*)["']/gi,
+                // HTML5 <source> tags
+                /<source\s+src=["']([^"']+\.(?:mp4|m3u8|mkv|webm)[^"']*)["']/gi,
+                // data-src video URLs (WordPress lazy loading)
+                /data-src=["']([^"']+\.(?:mp4|m3u8|mkv|webm)[^"']*)["']/gi,
+                // JS object file/url/source properties
+                /(?:file|url|source)["']?\s*[:=]\s*["']([^"']+\.(?:mp4|m3u8|mkv|webm)[^"']*)["']/gi,
+            ];
+            const seenStreams = new Set();
+            for (const pattern of streamPatterns) {
+                if (episodes.length > 0) break;
+                let sm;
+                while ((sm = pattern.exec(html)) !== null) {
+                    if (episodes.length >= 10) break;
+                    const streamUrl = sm[1];
+                    // Filter out non-video URLs (js, css, analytics, etc.)
+                    if (!streamUrl ||
+                        streamUrl.includes('.js') || streamUrl.includes('.css') ||
+                        streamUrl.includes('analytics') || streamUrl.includes('tracking') ||
+                        streamUrl.includes('facebook') || streamUrl.includes('google')) continue;
+                    if (seenStreams.has(streamUrl)) continue;
+                    seenStreams.add(streamUrl);
+                    episodes.push(new Episode({
+                        name: title || 'Film',
+                        episode: episodes.length + 1,
+                        url: streamUrl.startsWith('http') ? streamUrl : baseUrl + streamUrl,
+                        season: 1,
+                        posterUrl: posterUrl,
+                        contentType: 'Film',
+                        dubStatus: 'none'
+                    }));
+                }
             }
         }
 
